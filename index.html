@@ -60,6 +60,8 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .prox{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .xchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
 .xchip.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.xchip.up{border-color:var(--up);color:var(--up);background:var(--up-dim)}
+.xchip.dn{border-color:var(--dn);color:var(--dn);background:var(--dn-dim)}
 .prox .thwrap{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
 .prox input{width:58px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;outline:none}
 .widths{display:flex;gap:6px;flex-wrap:wrap}
@@ -126,7 +128,7 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <div class="fgroup"><label>From</label><input id="tFrom" type="time" step="60"></div>
       <div class="fgroup"><label>To</label><input id="tTo" type="time" step="60"></div>
     </div>
-    <div class="fsec">Proximity — within ± threshold %</div>
+    <div class="fsec">Crossovers — tap to cycle: off → ± near → ↑ crossed above → ↓ crossed below (within %)</div>
     <div class="prox">
       <span class="xchip" data-px="p921">9 × 21 EMA</span>
       <span class="xchip" data-px="p950">9 × 50 EMA</span>
@@ -214,7 +216,7 @@ const PROX = {
   pvwap: { a:r=>r.ltp, b:r=>r.vwap },
 };
 
-let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxOn = new Set();
+let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt = {};
 
 /* ================= STRATEGY ENGINE ================= */
 const curTF = () => STRATS[strat].tfs[tfIdx];
@@ -290,7 +292,15 @@ function currentList() {
       if (tT && ev.t > tT) continue;
     }
     let pxOk = true;
-    for (const id of proxOn) { const p = PROX[id]; if (!nearPct(p.a(r), p.b(r), th)) { pxOk = false; break; } }
+    for (const id in proxSt) {
+      const st = proxSt[id]; if (!st) continue;
+      const p = PROX[id], a = p.a(r), b = p.b(r);
+      if (a == null || b == null || b === 0) { pxOk = false; break; }
+      const d = (a - b) / Math.abs(b) * 100;          // signed % gap: + = first above second
+      if (st === 1 && Math.abs(d) > th) { pxOk = false; break; }
+      if (st === 2 && !(d > 0 && d <= th))  { pxOk = false; break; }
+      if (st === 3 && !(d < 0 && -d <= th)) { pxOk = false; break; }
+    }
     if (!pxOk) continue;
     if (q && !r.s.includes(q)) continue;
     if (!inRange(r.rsiD, $('rsiDmin').value, $('rsiDmax').value)) continue;
@@ -395,10 +405,23 @@ document.querySelectorAll('.wchip').forEach(w => w.onclick = () => {
   document.querySelectorAll('.wchip').forEach(x => x.classList.remove('on'));
   w.classList.add('on'); widthFilter = w.dataset.w; render();
 });
-document.querySelectorAll('.xchip').forEach(x => x.onclick = () => {
-  const id = x.dataset.px;
-  proxOn.has(id) ? proxOn.delete(id) : proxOn.add(id);
-  x.classList.toggle('on'); render();
+const PROX_GLYPH = ['', ' ±', ' ↑', ' ↓'];
+function drawProx() {
+  document.querySelectorAll('.xchip').forEach(x => {
+    const st = proxSt[x.dataset.px] || 0;
+    x.textContent = x.dataset.base + PROX_GLYPH[st];
+    x.classList.toggle('on', st === 1);
+    x.classList.toggle('up', st === 2);
+    x.classList.toggle('dn', st === 3);
+  });
+}
+document.querySelectorAll('.xchip').forEach(x => {
+  x.dataset.base = x.textContent;
+  x.onclick = () => {
+    const id = x.dataset.px;
+    proxSt[id] = ((proxSt[id] || 0) + 1) % 4;
+    drawProx(); render();
+  };
 });
 $('ftoggle').onclick = () => { $('fpanel').classList.toggle('open'); $('ftoggle').classList.toggle('active'); };
 const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol'];
@@ -409,8 +432,8 @@ $('freset').onclick = () => {
   TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3';
   $('fCandle').value = '';
   ['fFno'].forEach(id => $(id).checked = false);
-  sigFilter = ''; widthFilter = ''; proxOn.clear();
-  document.querySelectorAll('.xchip').forEach(x => x.classList.remove('on'));
+  sigFilter = ''; widthFilter = ''; proxSt = {};
+  drawProx();
   document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
   render();
 };

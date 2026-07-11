@@ -304,7 +304,7 @@ now_ist = datetime.now(IST)
 for i in range(0, len(cands), CHUNK):
     chunk = [s + ".NS" for s in cands[i:i + CHUNK]]
     try:
-        d5 = yf.download(chunk, period="1d", interval="5m", group_by="ticker",
+        d5 = yf.download(chunk, period="2d", interval="5m", group_by="ticker",
                          threads=True, progress=False, auto_adjust=False)
     except Exception:
         continue
@@ -320,7 +320,8 @@ for i in range(0, len(cands), CHUNK):
                 continue
             idx = df5.index
             idx_ist = idx.tz_localize(IST) if idx.tz is None else idx.tz_convert(IST)
-            today5 = df5[idx_ist.date == now_ist.date()]
+            last_day = max(idx_ist.date)      # last trading day (works on weekends/holidays)
+            today5 = df5[idx_ist.date == last_day]
             bt = {}
             for tf, mxk, mnk, cbk in (("m", "mMax", "mMin", "pm"), ("w", "wMax", "wMin", "pw"), ("d", "dMax", "dMin", "pd")):
                 cb = r.get(cbk)
