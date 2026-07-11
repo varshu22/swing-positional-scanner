@@ -113,6 +113,36 @@ def ema_last(close, span):
     return r2(close.ewm(span=span, adjust=False).mean().iloc[-1])
 
 
+def calc_vwap(df, window=20):
+    d = df.tail(window).dropna(subset=["High", "Low", "Close", "Volume"])
+    if d.empty or d["Volume"].sum() == 0:
+        return None
+    tp = (d["High"] + d["Low"] + d["Close"]) / 3
+    return r2((tp * d["Volume"]).sum() / d["Volume"].sum())
+
+
+def hhmm(ts, bar_minutes=5):
+    t = ts.tz_localize(IST) if ts.tzinfo is None else ts.tz_convert(IST)
+    return (t + timedelta(minutes=bar_minutes)).strftime("%H:%M")
+
+
+def cross_times(today5, up_levels, dn_levels):
+    out = {k: None for k in list(up_levels) + list(dn_levels)}
+    if today5 is None or today5.empty:
+        return out
+    for ts, bar in today5.iterrows():
+        c = bar.get("Close")
+        if c is None or pd.isna(c):
+            continue
+        for k, lv in up_levels.items():
+            if out[k] is None and lv is not None and c > lv:
+                out[k] = hhmm(ts)
+        for k, lv in dn_levels.items():
+            if out[k] is None and lv is not None and c < lv:
+                out[k] = hhmm(ts)
+    return out
+
+
 def candle_block(bar):
     """Prev completed candle OHLC + pattern + fib golden zone."""
     o, h, l, c = float(bar["Open"]), float(bar["High"]), float(bar["Low"]), float(bar["Close"])
@@ -194,12 +224,15 @@ def process_symbol(base, df):
         "dMax": d_max, "dMin": d_min, "dW": d_w,
         "pm": candle_block(pm_bar) if pm_bar is not None else None,
         "pw": candle_block(pw_bar) if pw_bar is not None else None,
-        "pdPat": candle_pattern(*(float(pd_bar[k]) for k in ("Open", "High", "Low", "Close"))),
+        "pd": candle_block(pd_bar) if pd_bar is not None else None,
         "rsiD": wilder_rsi(df["Close"]),
         "rsiW": wilder_rsi(weekly["Close"]),
         "rsiM": wilder_rsi(monthly["Close"]),
+        "e9": ema_last(df["Close"], 9),
+        "e21": ema_last(df["Close"], 21),
         "e50": ema_last(df["Close"], 50),
         "e200": ema_last(df["Close"], 200),
+        "vwap": calc_vwap(df),
     }
 
     vol = df["Volume"].dropna()
@@ -245,6 +278,65 @@ for i in range(0, len(symbols), CHUNK):
     done = min(i + CHUNK, len(symbols))
     print(f"{done}/{len(symbols)} processed | ok={len(rows)} fail={failed}")
     time.sleep(1.0)
+
+# ===============================
+# BREAKOUT-TIME PASS (today's 5m, only symbols beyond a level)
+# ===============================
+by_sym = {r["s"]: r for r in rows}
+cands = []
+for r in rows:
+    ltp = r.get("ltp")
+    if ltp is None:
+        continue
+    hit = False
+    for mxk, mnk, cbk in (("mMax", "mMin", "pm"), ("wMax", "wMin", "pw"), ("dMax", "dMin", "pd")):
+        mx, mn, cb = r.get(mxk), r.get(mnk), r.get(cbk)
+        if (mx is not None and ltp > mx) or (mn is not None and ltp < mn):
+            hit = True
+        if cb and cb.get("pat") == "Doji" and ltp > cb["c"]:
+            hit = True
+    if hit:
+        cands.append(r["s"])
+cands = cands[:400]
+print(f"Breakout-time pass: {len(cands)} candidates")
+
+now_ist = datetime.now(IST)
+for i in range(0, len(cands), CHUNK):
+    chunk = [s + ".NS" for s in cands[i:i + CHUNK]]
+    try:
+        d5 = yf.download(chunk, period="1d", interval="5m", group_by="ticker",
+                         threads=True, progress=False, auto_adjust=False)
+    except Exception:
+        continue
+    for sym in chunk:
+        base = sym.replace(".NS", "")
+        r = by_sym.get(base)
+        if r is None:
+            continue
+        try:
+            df5 = d5[sym] if isinstance(d5.columns, pd.MultiIndex) else d5
+            df5 = df5.dropna(how="all")
+            if df5.empty:
+                continue
+            idx = df5.index
+            idx_ist = idx.tz_localize(IST) if idx.tz is None else idx.tz_convert(IST)
+            today5 = df5[idx_ist.date == now_ist.date()]
+            bt = {}
+            for tf, mxk, mnk, cbk in (("m", "mMax", "mMin", "pm"), ("w", "wMax", "wMin", "pw"), ("d", "dMax", "dMin", "pd")):
+                cb = r.get(cbk)
+                up = {"u": r.get(mxk)}
+                dn = {"l": r.get(mnk)}
+                if cb:
+                    up["dh"] = cb.get("h")
+                    up["dc"] = cb.get("c")
+                res = cross_times(today5, up, dn)
+                if any(v for v in res.values()):
+                    bt[tf] = {k: v for k, v in res.items() if v}
+            if bt:
+                r["bt"] = bt
+        except Exception:
+            continue
+    time.sleep(0.6)
 
 # ===============================
 # SAVE
