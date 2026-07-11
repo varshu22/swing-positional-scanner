@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Rangebound — Swing · Positional Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1117; --panel:#151B23; --panel2:#1A222C; --line:#232B36;
+  --text:#E7EDF4; --muted:#7D8896; --gold:#E4B454; --gold-dim:rgba(228,180,84,.16);
+  --up:#46C08C; --up-dim:rgba(70,192,140,.14);
+  --dn:#E25C6E; --dn-dim:rgba(226,92,110,.14);
+  --blue:#5BA3E8; --blue-dim:rgba(91,163,232,.14);
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --disp:'Sora',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);-webkit-font-smoothing:antialiased;padding-bottom:60px}
+a{color:inherit;text-decoration:none}
+button,select,input{font-family:inherit}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:20;background:rgba(13,17,23,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 14px}
+.hrow{display:flex;align-items:center;gap:10px;max-width:1100px;margin:0 auto}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--gold),#B07E24);display:flex;align-items:center;justify-content:center;font-weight:700;color:#141414;font-size:13px;flex:none}
+.htitle{font-weight:700;font-size:16px;letter-spacing:.2px}
+.hsub{font-size:11px;color:var(--muted)}
+.upd{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.upd .stale{color:var(--gold)}
+.tabs{display:flex;gap:8px;max-width:1100px;margin:10px auto 0}
+.tab{flex:1;padding:9px 0;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;text-align:center;transition:.15s}
+.tab.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+
+main{max-width:1100px;margin:0 auto;padding:12px 14px}
+
+/* ---------- strategy + pulse ---------- */
+.strat-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.schip{padding:8px 14px;border:1px solid var(--line);border-radius:20px;background:var(--panel);font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.schip.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.pulse{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.pulse::-webkit-scrollbar{display:none}
+.pchip{flex:none;padding:6px 11px;border-radius:9px;background:var(--panel);border:1px solid var(--line);font-size:11.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.pchip b{font-family:var(--mono);color:var(--text);margin-left:5px}
+.pchip.on{border-color:var(--gold);color:var(--gold)}
+.pchip.on b{color:var(--gold)}
+
+/* ---------- filters ---------- */
+.fbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.search{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;outline:none}
+.search:focus{border-color:var(--gold)}
+.fbtn{padding:9px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer}
+.fbtn.active{border-color:var(--gold);color:var(--gold)}
+.fpanel{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.fpanel.open{display:block}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.fgroup label{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.fgroup select,.fgroup input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none}
+.frange{display:flex;gap:6px}
+.chks{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+.chks label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.chks input{accent-color:var(--gold)}
+.widths{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.wchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
+.wchip.on{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
+.freset{margin-top:10px;font-size:12px;color:var(--dn);cursor:pointer;background:none;border:none}
+
+/* ---------- toolbar ---------- */
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted)}
+.count{font-family:var(--mono)}
+.toolbar select{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px}
+.copy{padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-size:11.5px;cursor:pointer}
+.copy:active{color:var(--gold);border-color:var(--gold)}
+
+/* ---------- rows ---------- */
+.rows{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:grid;grid-template-columns:1fr auto;gap:4px 10px}
+.sym{font-weight:700;font-size:15px;letter-spacing:.3px}
+.sym .fo{font-size:9px;color:var(--blue);border:1px solid var(--blue);border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:2px}
+.ltp{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right}
+.badge{justify-self:end;display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.4px}
+.badge .pct{font-family:var(--mono);font-weight:600}
+.b-up{background:var(--up-dim);color:var(--up)}
+.b-up2{background:var(--blue-dim);color:var(--blue)}
+.b-gz{background:var(--gold-dim);color:var(--gold)}
+.b-dn{background:var(--dn-dim);color:var(--dn)}
+.b-mut{background:var(--panel2);color:var(--muted)}
+.rail-wrap{grid-column:1/-1;margin:4px 0 2px}
+.rail{position:relative;height:8px;border-radius:4px;background:var(--panel2);border:1px solid var(--line)}
+.rail .gz{position:absolute;top:0;bottom:0;background:var(--gold-dim);border-left:1px solid var(--gold);border-right:1px solid var(--gold)}
+.rail .dot{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--bg)}
+.rail-lab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px}
+.meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--muted)}
+.meta b{color:var(--text);font-family:var(--mono);font-weight:600}
+.meta .wtag{color:var(--blue)}
+.empty{text-align:center;color:var(--muted);padding:40px 0;font-size:13px}
+.loading{text-align:center;color:var(--muted);padding:60px 0}
+footer{max-width:1100px;margin:20px auto;padding:0 14px;font-size:10.5px;color:var(--muted);text-align:center}
+@media(min-width:760px){.rows{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div class="logo">RB</div>
+    <div>
+      <div class="htitle">Rangebound</div>
+      <div class="hsub">All-NSE · Swing &amp; Positional</div>
+    </div>
+    <div class="upd" id="upd">loading…</div>
+  </div>
+  <div class="tabs">
+    <div class="tab on" data-mode="POS">POSITIONAL · Doji BO</div>
+    <div class="tab" data-mode="SWING">SWING · Rect BO</div>
+  </div>
+</header>
+
+<main>
+  <div class="strat-row" id="strats"></div>
+  <div class="pulse" id="pulse"></div>
+
+  <div class="fbar">
+    <input class="search" id="search" placeholder="Search symbol…" autocomplete="off">
+    <button class="fbtn" id="ftoggle">Filters</button>
+  </div>
+
+  <div class="fpanel" id="fpanel">
+    <div class="fgrid">
+      <div class="fgroup">
+        <label>RSI Daily</label>
+        <div class="frange"><input id="rsiDmin" type="number" placeholder="min"><input id="rsiDmax" type="number" placeholder="max"></div>
+      </div>
+      <div class="fgroup">
+        <label>RSI Monthly</label>
+        <div class="frange"><input id="rsiMmin" type="number" placeholder="min"><input id="rsiMmax" type="number" placeholder="max"></div>
+      </div>
+      <div class="fgroup">
+        <label>Last day candle</label>
+        <select id="fCandle">
+          <option value="">Any</option><option>Bullish</option><option>Bearish</option>
+          <option>Doji</option><option>Hammer</option><option>Shooting Star</option>
+          <option>Bullish Marubozu</option><option>Bearish Marubozu</option>
+        </select>
+      </div>
+      <div class="fgroup">
+        <label>Min 7-day avg volume</label>
+        <input id="fVol" type="number" placeholder="e.g. 100000">
+      </div>
+    </div>
+    <div class="chks">
+      <label><input type="checkbox" id="fE50"> Above EMA 50</label>
+      <label><input type="checkbox" id="fE200"> Above EMA 200</label>
+      <label><input type="checkbox" id="fFno"> F&amp;O only</label>
+    </div>
+    <div class="widths" id="widths" style="display:none">
+      <span class="wchip on" data-w="">Any width</span>
+      <span class="wchip" data-w="VN">Very narrow</span>
+      <span class="wchip" data-w="N">Narrow</span>
+      <span class="wchip" data-w="M">Medium</span>
+      <span class="wchip" data-w="W">Wide</span>
+    </div>
+    <button class="freset" id="freset">Reset all filters</button>
+  </div>
+
+  <div class="toolbar">
+    <span class="count" id="count">—</span>
+    <button class="copy" id="copyBtn">Copy symbols</button>
+    <select id="sort">
+      <option value="pct">Sort: distance %</option>
+      <option value="sym">Sort: symbol</option>
+      <option value="rsiD">Sort: RSI daily</option>
+      <option value="width">Sort: range width</option>
+      <option value="vol">Sort: volume</option>
+    </select>
+  </div>
+
+  <div class="rows" id="rows"><div class="loading">Loading data.json…</div></div>
+</main>
+
+<footer>
+  Rangebound · doji breakout &amp; rectangle breakout scanner · runs entirely in your browser ·
+  breakout window ≤5% beyond bound, "near" ≤2% inside · analysis tool, not investment advice.
+</footer>
+
+<script>
+/* ================= CONFIG — tune freely ================= */
+const CFG = {
+  BO_MAX: 5,     // % beyond bound still shown as breakout
+  NEAR: 2,       // % inside bound shown as "near"
+  WIDTH: {       // range-width buckets, % of (max-min)/min
+    M: { VN: 25, N: 50, M: 100 },   // 23-month rectangle
+    W: { VN: 12, N: 25, M: 50 },    // 21-week rectangle
+  },
+  STALE_HOURS: 30,
+};
+
+const MODES = {
+  POS: [
+    { id:'pmDoji', label:'S1 · Prev Monthly Doji', get:r=>r.pm },
+    { id:'pwDoji', label:'S2 · Prev Weekly Doji',  get:r=>r.pw },
+  ],
+  SWING: [
+    { id:'rectM', label:'S1 · 23-Month Rect', tf:'M', get:r=>({max:r.mMax,min:r.mMin,w:r.mW}) },
+    { id:'rectW', label:'S2 · 21-Week Rect',  tf:'W', get:r=>({max:r.wMax,min:r.wMin,w:r.wW}) },
+  ],
+};
+
+const DOJI_SIGNALS = ['HIGH BO','CLOSE BO','GOLDEN ZONE','DOJI WATCH'];
+const RECT_SIGNALS = ['UPPER BO','NEAR UPPER','LOWER BD','NEAR LOWER','INSIDE'];
+
+let DATA = [], mode = 'POS', strat = 'pmDoji', sigFilter = '', widthFilter = '';
+
+/* ================= STRATEGY ENGINE ================= */
+function evalDoji(r, c) {
+  if (!c || c.pat !== 'Doji' || r.ltp == null) return null;
+  const ltp = r.ltp;
+  if (ltp > c.h)  return { sig:'HIGH BO',  cls:'b-up',  pct:(ltp-c.h)/c.h*100, c };
+  const lo = Math.min(c.f50, c.f618), hi = Math.max(c.f50, c.f618);
+  if (ltp >= lo && ltp <= hi)
+    return { sig:'GOLDEN ZONE', cls:'b-gz', pct:(ltp-c.c)/c.c*100, c };
+  if (ltp > c.c)  return { sig:'CLOSE BO', cls:'b-up2', pct:(ltp-c.c)/c.c*100, c };
+  return { sig:'DOJI WATCH', cls:'b-mut', pct:(ltp-c.c)/c.c*100, c };
+}
+
+function bucket(w, tf) {
+  const t = CFG.WIDTH[tf];
+  if (w == null) return null;
+  if (w <= t.VN) return 'VN';
+  if (w <= t.N)  return 'N';
+  if (w <= t.M)  return 'M';
+  return 'W';
+}
+const BUCKET_LABEL = { VN:'Very narrow', N:'Narrow', M:'Medium', W:'Wide' };
+
+function evalRect(r, b, tf) {
+  if (!b || b.max == null || b.min == null || r.ltp == null) return null;
+  const ltp = r.ltp, wb = bucket(b.w, tf);
+  const base = { max:b.max, min:b.min, w:b.w, wb };
+  if (ltp > b.max) {
+    const p = (ltp-b.max)/b.max*100;
+    if (p <= CFG.BO_MAX) return { sig:'UPPER BO', cls:'b-up', pct:p, ...base };
+    return null; // extended beyond 5% — out of the play window
+  }
+  if ((b.max-ltp)/b.max*100 <= CFG.NEAR)
+    return { sig:'NEAR UPPER', cls:'b-up2', pct:-(b.max-ltp)/b.max*100, ...base };
+  if (ltp < b.min) {
+    const p = (b.min-ltp)/b.min*100;
+    if (p <= CFG.BO_MAX) return { sig:'LOWER BD', cls:'b-dn', pct:-p, ...base };
+    return null;
+  }
+  if ((ltp-b.min)/b.min*100 <= CFG.NEAR)
+    return { sig:'NEAR LOWER', cls:'b-dn', pct:(ltp-b.min)/b.min*100, ...base };
+  return { sig:'INSIDE', cls:'b-mut', pct:(ltp-b.min)/(b.max-b.min)*100-50, ...base };
+}
+
+function evaluate(r) {
+  const s = MODES[mode].find(x => x.id === strat);
+  return mode === 'POS' ? evalDoji(r, s.get(r)) : evalRect(r, s.get(r), s.tf);
+}
+
+/* ================= FILTERS ================= */
+const $ = id => document.getElementById(id);
+function inRange(v, lo, hi) {
+  if (v == null) return !(lo || hi);
+  if (lo !== '' && v < +lo) return false;
+  if (hi !== '' && v > +hi) return false;
+  return true;
+}
+
+function currentList() {
+  const q = $('search').value.trim().toUpperCase();
+  const out = [];
+  for (const r of DATA) {
+    const ev = evaluate(r);
+    if (!ev) continue;
+    if (sigFilter && ev.sig !== sigFilter) continue;
+    if (mode === 'SWING' && widthFilter && ev.wb !== widthFilter) continue;
+    if (q && !r.s.includes(q)) continue;
+    if (!inRange(r.rsiD, $('rsiDmin').value, $('rsiDmax').value)) continue;
+    if (!inRange(r.rsiM, $('rsiMmin').value, $('rsiMmax').value)) continue;
+    const fc = $('fCandle').value;
+    if (fc && r.pdPat !== fc) continue;
+    if ($('fE50').checked  && !(r.e50  != null && r.ltp > r.e50))  continue;
+    if ($('fE200').checked && !(r.e200 != null && r.ltp > r.e200)) continue;
+    if ($('fFno').checked && !r.fno) continue;
+    const mv = $('fVol').value;
+    if (mv && !(r.v7 >= +mv)) continue;
+    out.push({ r, ev });
+  }
+  const key = $('sort').value;
+  out.sort((a, b) => {
+    if (key === 'sym')   return a.r.s < b.r.s ? -1 : 1;
+    if (key === 'rsiD')  return (b.r.rsiD ?? -1) - (a.r.rsiD ?? -1);
+    if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
+    if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
+    return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
+  });
+  return out;
+}
+
+/* ================= RENDER ================= */
+const fmtVol = v => v == null ? '—'
+  : v >= 1e7 ? (v/1e7).toFixed(1)+'Cr'
+  : v >= 1e5 ? (v/1e5).toFixed(1)+'L'
+  : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+
+function rail(ev, r) {
+  let lo, hi, gz = '';
+  if (mode === 'POS') { lo = ev.c.l; hi = ev.c.h; }
+  else { lo = ev.min; hi = ev.max; }
+  if (lo == null || hi == null || hi <= lo) return '';
+  const span = hi - lo, pad = span * 0.08;
+  const L = lo - pad, R = hi + pad, W = R - L;
+  const pos = Math.min(100, Math.max(0, (r.ltp - L) / W * 100));
+  if (mode === 'POS') {
+    const g1 = (Math.min(ev.c.f50, ev.c.f618) - L) / W * 100;
+    const g2 = (Math.max(ev.c.f50, ev.c.f618) - L) / W * 100;
+    gz = `<div class="gz" style="left:${g1}%;width:${g2-g1}%"></div>`;
+  }
+  const col = ev.cls === 'b-up' ? 'var(--up)' : ev.cls === 'b-dn' ? 'var(--dn)'
+            : ev.cls === 'b-gz' ? 'var(--gold)' : 'var(--blue)';
+  return `<div class="rail-wrap">
+    <div class="rail">${gz}<div class="dot" style="left:${pos}%;background:${col}"></div></div>
+    <div class="rail-lab"><span>${lo}</span><span>${hi}</span></div>
+  </div>`;
+}
+
+function render() {
+  const list = currentList();
+  $('count').textContent = `${list.length} stocks`;
+
+  // pulse counts (ignore sig filter so all chips stay informative)
+  const sigs = mode === 'POS' ? DOJI_SIGNALS : RECT_SIGNALS;
+  const counts = Object.fromEntries(sigs.map(s => [s, 0]));
+  for (const r of DATA) { const ev = evaluate(r); if (ev && counts[ev.sig] != null) counts[ev.sig]++; }
+  $('pulse').innerHTML =
+    `<span class="pchip ${sigFilter===''?'on':''}" data-sig="">All<b>${Object.values(counts).reduce((a,b)=>a+b,0)}</b></span>` +
+    sigs.map(s => `<span class="pchip ${sigFilter===s?'on':''}" data-sig="${s}">${s}<b>${counts[s]}</b></span>`).join('');
+  document.querySelectorAll('.pchip').forEach(c =>
+    c.onclick = () => { sigFilter = c.dataset.sig; render(); });
+
+  const rowsEl = $('rows');
+  if (!list.length) { rowsEl.innerHTML = '<div class="empty">No stocks match. Loosen a filter or pick another signal chip.</div>'; return; }
+
+  rowsEl.innerHTML = list.slice(0, 400).map(({ r, ev }) => {
+    const pct = ev.pct == null ? '' : `<span class="pct">${ev.pct >= 0 ? '+' : ''}${ev.pct.toFixed(2)}%</span>`;
+    const wtag = mode === 'SWING' ? `<span class="wtag">W <b>${ev.w}%</b> ${BUCKET_LABEL[ev.wb]||''}</span>` : '';
+    const gzTag = mode === 'POS' ? `<span>GZ <b>${ev.c.f50}–${ev.c.f618}</b></span>` : '';
+    return `<div class="card">
+      <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}${r.fno?'<span class="fo">F&O</span>':''}</a>
+      <div class="ltp">${r.ltp}</div>
+      <div></div>
+      <div class="badge ${ev.cls}">${ev.sig} ${pct}</div>
+      ${rail(ev, r)}
+      <div class="meta">
+        ${wtag}${gzTag}
+        <span>RSI D <b>${r.rsiD ?? '—'}</b></span>
+        <span>M <b>${r.rsiM ?? '—'}</b></span>
+        <span>W <b>${r.rsiW ?? '—'}</b></span>
+        <span>PD <b>${r.pdPat ?? '—'}</b></span>
+        <span>Vol <b>${fmtVol(r.v7)}</b></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ================= UI WIRING ================= */
+function drawStrats() {
+  $('strats').innerHTML = MODES[mode].map(s =>
+    `<span class="schip ${s.id===strat?'on':''}" data-id="${s.id}">${s.label}</span>`).join('');
+  document.querySelectorAll('.schip').forEach(c =>
+    c.onclick = () => { strat = c.dataset.id; sigFilter = ''; drawStrats(); render(); });
+  $('widths').style.display = mode === 'SWING' ? 'flex' : 'none';
+}
+
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+  mode = t.dataset.mode;
+  strat = MODES[mode][0].id;
+  sigFilter = ''; widthFilter = '';
+  document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
+  drawStrats(); render();
+});
+
+document.querySelectorAll('.wchip').forEach(w => w.onclick = () => {
+  document.querySelectorAll('.wchip').forEach(x => x.classList.remove('on'));
+  w.classList.add('on'); widthFilter = w.dataset.w; render();
+});
+
+$('ftoggle').onclick = () => {
+  $('fpanel').classList.toggle('open');
+  $('ftoggle').classList.toggle('active');
+};
+['search','rsiDmin','rsiDmax','rsiMmin','rsiMmax','fVol'].forEach(id => $(id).oninput = render);
+['fCandle','sort'].forEach(id => $(id).onchange = render);
+['fE50','fE200','fFno'].forEach(id => $(id).onchange = render);
+$('freset').onclick = () => {
+  ['search','rsiDmin','rsiDmax','rsiMmin','rsiMmax','fVol'].forEach(id => $(id).value = '');
+  $('fCandle').value = ''; ['fE50','fE200','fFno'].forEach(id => $(id).checked = false);
+  sigFilter = ''; widthFilter = '';
+  document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
+  render();
+};
+$('copyBtn').onclick = () => {
+  const syms = currentList().map(x => 'NSE:' + x.r.s).join(',');
+  navigator.clipboard.writeText(syms).then(() => {
+    $('copyBtn').textContent = 'Copied!';
+    setTimeout(() => $('copyBtn').textContent = 'Copy symbols', 1200);
+  });
+};
+
+/* ================= LOAD ================= */
+fetch('data.json?t=' + Date.now())
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(j => {
+    DATA = j.rows || [];
+    const age = (Date.now() - new Date(j.updatedUtc).getTime()) / 36e5;
+    $('upd').innerHTML = j.updated + (age > CFG.STALE_HOURS ? ' <span class="stale">· stale</span>' : '');
+    drawStrats(); render();
+  })
+  .catch(e => {
+    $('rows').innerHTML = `<div class="empty">Could not load data.json (${e.message}).<br>Run the "Update scanner data" workflow once in the Actions tab, then refresh.</div>`;
+    $('upd').textContent = 'no data';
+  });
+</script>
+</body>
+</html>
