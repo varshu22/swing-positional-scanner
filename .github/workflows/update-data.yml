@@ -3,7 +3,7 @@ name: Update scanner data
 on:
   workflow_dispatch:        # manual + cron-job.org trigger (reliable)
   schedule:
-    - cron: "45 10 * * 1-5" # 16:15 IST post-close (GitHub cron is best-effort)
+    - cron: "50 3,7,11 * * 1-5" # 09:20, 13:20, 17:20 IST (backup; cron-job.org primary)
 
 permissions:
   contents: write
