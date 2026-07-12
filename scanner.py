@@ -44,18 +44,21 @@ eq = eq[eq["SERIES"] == "EQ"]
 base_symbols = eq["SYMBOL"].astype(str).str.strip().tolist()
 
 fno_set = set()
-try:
-    r = requests.get(
-        "https://archives.nseindia.com/content/fo/fo_mktlots.csv",
-        headers=HEADERS, timeout=30,
-    )
-    if r.ok:
-        for line in r.text.splitlines()[1:]:
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) >= 2 and parts[1]:
-                fno_set.add(parts[1])
-except Exception:
-    pass  # F&O flag is optional
+for _url in ("https://nsearchives.nseindia.com/content/fo/fo_mktlots.csv",
+             "https://archives.nseindia.com/content/fo/fo_mktlots.csv"):
+    try:
+        _r = requests.get(_url, headers=HEADERS, timeout=30)
+        if _r.ok and len(_r.text) > 200:
+            for _line in _r.text.splitlines()[1:]:
+                _p = [x.strip() for x in _line.split(",")]
+                if len(_p) >= 2 and _p[1] and _p[1].upper() == _p[1] and " " not in _p[1]:
+                    fno_set.add(_p[1])
+            if fno_set:
+                break
+    except Exception:
+        continue
+if not fno_set:
+    print("WARNING: F&O list fetch failed from all sources — fno flags will be 0")
 
 symbols = [s + ".NS" for s in base_symbols]
 print(f"Universe: {len(symbols)} symbols | F&O flags: {len(fno_set)}")
@@ -177,6 +180,11 @@ def rect(closes_hist):
 AGG = {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
 
 
+def ema_block(closes):
+    return {"e9": ema_last(closes, 9), "e21": ema_last(closes, 21),
+            "e50": ema_last(closes, 50), "e200": ema_last(closes, 200)}
+
+
 def process_symbol(base, df):
     df = df.dropna(subset=["Close"])
     if len(df) < 60:
@@ -232,6 +240,11 @@ def process_symbol(base, df):
         "e21": ema_last(df["Close"], 21),
         "e50": ema_last(df["Close"], 50),
         "e200": ema_last(df["Close"], 200),
+        "ema": {
+            "d": ema_block(df["Close"]),
+            "w": ema_block(weekly["Close"]),
+            "m": ema_block(monthly["Close"]),
+        },
         "vwap": calc_vwap(df),
     }
 
@@ -251,7 +264,7 @@ for i in range(0, len(symbols), CHUNK):
     chunk = symbols[i:i + CHUNK]
     try:
         data = yf.download(
-            chunk, period="3y", interval="1d",
+            chunk, period="5y", interval="1d",
             group_by="ticker", threads=True,
             progress=False, auto_adjust=False,
         )
@@ -293,7 +306,7 @@ for r in rows:
         mx, mn, cb = r.get(mxk), r.get(mnk), r.get(cbk)
         if (mx is not None and ltp > mx) or (mn is not None and ltp < mn):
             hit = True
-        if cb and cb.get("pat") == "Doji" and ltp > cb["c"]:
+        if cb and cb.get("pat") == "Doji" and (ltp > cb["c"] or ltp < cb["l"]):
             hit = True
     if hit:
         cands.append(r["s"])
@@ -330,6 +343,7 @@ for i in range(0, len(cands), CHUNK):
                 if cb:
                     up["dh"] = cb.get("h")
                     up["dc"] = cb.get("c")
+                    dn["dl"] = cb.get("l")
                 res = cross_times(today5, up, dn)
                 if any(v for v in res.values()):
                     bt[tf] = {k: v for k, v in res.items() if v}

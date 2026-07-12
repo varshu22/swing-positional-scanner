@@ -128,13 +128,13 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <div class="fgroup"><label>From</label><input id="tFrom" type="time" step="60"></div>
       <div class="fgroup"><label>To</label><input id="tTo" type="time" step="60"></div>
     </div>
-    <div class="fsec">Crossovers — tap to cycle: off → ± near → ↑ crossed above → ↓ crossed below (within %)</div>
+    <div class="fsec">Crossovers on SELECTED timeframe — tap chip to cycle: off → ± either side → ↑ first above second → ↓ first below second · gap ≤ % box</div>
     <div class="prox">
       <span class="xchip" data-px="p921">9 × 21 EMA</span>
       <span class="xchip" data-px="p950">9 × 50 EMA</span>
       <span class="xchip" data-px="p9200">9 × 200 EMA</span>
       <span class="xchip" data-px="pvwap">LTP × VWAP</span>
-      <span class="thwrap">± <input id="pTh" type="number" value="0.3" step="0.1" min="0"> %</span>
+      <span class="thwrap">gap ≤ <input id="pTh" type="number" value="0.3" step="0.1" min="0"> % (positive number — direction is set by the chip)</span>
     </div>
     <div class="fsec">Momentum &amp; context</div>
     <div class="fgrid">
@@ -145,6 +145,7 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
         <select id="fCandle"><option value="">Any</option><option>Bullish</option><option>Bearish</option><option>Doji</option><option>Hammer</option><option>Shooting Star</option><option>Bullish Marubozu</option><option>Bearish Marubozu</option></select>
       </div>
       <div class="fgroup"><label>Min 7-day avg volume</label><input id="fVol" type="number" placeholder="e.g. 500000"></div>
+      <div class="fgroup"><label>Rect BO distance %</label><div class="frange"><input id="boMin" type="number" placeholder="min" step="0.5"><input id="boMax" type="number" value="5" placeholder="max" step="0.5"></div></div>
     </div>
     <div class="chks" style="margin-top:10px">
       <label><input type="checkbox" id="fFno"> F&amp;O only</label>
@@ -206,13 +207,14 @@ const STRATS = {
     { k:'m', lab:'Month · 23 bars', wtf:'M', get:r=>({max:r.mMax, min:r.mMin, w:r.mW}) },
   ]},
 };
-const DOJI_SIGNALS = ['HIGH BO','CLOSE BO','GOLDEN ZONE','DOJI WATCH'];
+const DOJI_SIGNALS = ['HIGH BO','CLOSE BO','LOW BD','GOLDEN ZONE','DOJI WATCH'];
 const RECT_SIGNALS = ['UPPER BO','NEAR UPPER','LOWER BD','NEAR LOWER','INSIDE'];
-const BT_KEY = { 'HIGH BO':'dh', 'CLOSE BO':'dc', 'UPPER BO':'u', 'LOWER BD':'l' };
+const BT_KEY = { 'HIGH BO':'dh', 'CLOSE BO':'dc', 'LOW BD':'dl', 'UPPER BO':'u', 'LOWER BD':'l' };
+const emaOf = (r, k) => r.ema?.[curTF().k]?.[k] ?? null;   // EMA of the SELECTED timeframe
 const PROX = {
-  p921:  { a:r=>r.e9,  b:r=>r.e21  },
-  p950:  { a:r=>r.e9,  b:r=>r.e50  },
-  p9200: { a:r=>r.e9,  b:r=>r.e200 },
+  p921:  { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e21')  },
+  p950:  { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e50')  },
+  p9200: { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e200') },
   pvwap: { a:r=>r.ltp, b:r=>r.vwap },
 };
 
@@ -220,12 +222,14 @@ let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt
 
 /* ================= STRATEGY ENGINE ================= */
 const curTF = () => STRATS[strat].tfs[tfIdx];
+
 const btFor = (sig, r) => { const k = BT_KEY[sig]; return k ? (r.bt?.[curTF().k]?.[k] ?? null) : null; };
 
 function evalDoji(r, c) {
   if (!c || c.pat !== 'Doji' || r.ltp == null) return null;
   const ltp = r.ltp;
   if (ltp > c.h) return { sig:'HIGH BO', cls:'b-up', pct:(ltp-c.h)/c.h*100, c };
+  if (ltp < c.l) return { sig:'LOW BD', cls:'b-dn', pct:-(c.l-ltp)/c.l*100, c };
   const lo = Math.min(c.f50, c.f618), hi = Math.max(c.f50, c.f618);
   if (ltp >= lo && ltp <= hi) return { sig:'GOLDEN ZONE', cls:'b-gz', pct:(ltp-c.c)/c.c*100, c };
   if (ltp > c.c) return { sig:'CLOSE BO', cls:'b-up2', pct:(ltp-c.c)/c.c*100, c };
@@ -244,16 +248,12 @@ function evalRect(r, b, tf) {
   if (!b || b.max == null || b.min == null || r.ltp == null) return null;
   const ltp = r.ltp, wb = bucket(b.w, tf);
   const base = { max:b.max, min:b.min, w:b.w, wb };
-  if (ltp > b.max) {
-    const p = (ltp-b.max)/b.max*100;
-    return p <= CFG.BO_MAX ? { sig:'UPPER BO', cls:'b-up', pct:p, ...base } : null;
-  }
+  if (ltp > b.max)
+    return { sig:'UPPER BO', cls:'b-up', pct:(ltp-b.max)/b.max*100, ...base };
   if ((b.max-ltp)/b.max*100 <= CFG.NEAR)
     return { sig:'NEAR UPPER', cls:'b-up2', pct:-(b.max-ltp)/b.max*100, ...base };
-  if (ltp < b.min) {
-    const p = (b.min-ltp)/b.min*100;
-    return p <= CFG.BO_MAX ? { sig:'LOWER BD', cls:'b-dn', pct:-p, ...base } : null;
-  }
+  if (ltp < b.min)
+    return { sig:'LOWER BD', cls:'b-dn', pct:-(b.min-ltp)/b.min*100, ...base };
   if ((ltp-b.min)/b.min*100 <= CFG.NEAR)
     return { sig:'NEAR LOWER', cls:'b-dn', pct:(ltp-b.min)/b.min*100, ...base };
   return { sig:'INSIDE', cls:'b-mut', pct:(ltp-b.min)/(b.max-b.min)*100-50, ...base };
@@ -276,14 +276,19 @@ function inRange(v, lo, hi) {
 }
 const nearPct = (a, b, th) => a != null && b != null && b !== 0 && Math.abs(a - b) / Math.abs(b) * 100 <= th;
 
+function boOk(ev) {
+  if (ev.sig !== 'UPPER BO' && ev.sig !== 'LOWER BD') return true;
+  return inRange(Math.abs(ev.pct), $('boMin').value, $('boMax').value);
+}
+
 function currentList() {
   const q = $('search').value.trim().toUpperCase();
   const tF = $('tFrom').value, tT = $('tTo').value, timeOn = !!(tF || tT);
-  const th = +$('pTh').value || 0.3;
+  const th = Math.abs(+$('pTh').value) || 0.3;  // direction comes from the chip; number is always a positive gap
   const out = [];
   for (const r of DATA) {
     const ev = evaluate(r);
-    if (!ev) continue;
+    if (!ev || !boOk(ev)) continue;
     if (sigFilter && ev.sig !== sigFilter) continue;
     if (STRATS[strat].kind === 'rect' && widthFilter && ev.wb !== widthFilter) continue;
     if (timeOn) {
@@ -353,7 +358,7 @@ function render() {
   $('count').textContent = `${list.length} stocks`;
   const sigs = STRATS[strat].kind === 'doji' ? DOJI_SIGNALS : RECT_SIGNALS;
   const counts = Object.fromEntries(sigs.map(s => [s, 0]));
-  for (const r of DATA) { const ev = evaluate(r); if (ev && counts[ev.sig] != null) counts[ev.sig]++; }
+  for (const r of DATA) { const ev = evaluate(r); if (ev && boOk(ev) && counts[ev.sig] != null) counts[ev.sig]++; }
   $('pulse').innerHTML =
     `<span class="pchip ${sigFilter===''?'on':''}" data-sig="">All<b>${Object.values(counts).reduce((a,b)=>a+b,0)}</b></span>` +
     sigs.map(s => `<span class="pchip ${sigFilter===s?'on':''}" data-sig="${s}">${s}<b>${counts[s]}</b></span>`).join('');
@@ -376,7 +381,7 @@ function render() {
         ${wtag}${gzTag}
         <span>RSI D <b>${r.rsiD ?? '—'}</b></span><span>W <b>${r.rsiW ?? '—'}</b></span>
         <span>M <b>${r.rsiM ?? '—'}</b></span>
-        <span>VWAP <b>${r.vwap ?? '—'}</b></span><span>Vol <b>${fmtVol(r.v7)}</b></span>
+        <span>E9 <b>${emaOf(r,'e9') ?? '—'}</b></span><span>E21 <b>${emaOf(r,'e21') ?? '—'}</b></span><span>VWAP <b>${r.vwap ?? '—'}</b></span><span>Vol <b>${fmtVol(r.v7)}</b></span>
       </div>
     </div>`;
   }).join('');
@@ -424,12 +429,12 @@ document.querySelectorAll('.xchip').forEach(x => {
   };
 });
 $('ftoggle').onclick = () => { $('fpanel').classList.toggle('open'); $('ftoggle').classList.toggle('active'); };
-const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol'];
+const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol','boMin','boMax'];
 TXT.forEach(id => $(id).oninput = render);
 ['fCandle','sort'].forEach(id => $(id).onchange = render);
 ['fFno'].forEach(id => $(id).onchange = render);
 $('freset').onclick = () => {
-  TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3';
+  TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3'; $('boMax').value = '5';
   $('fCandle').value = '';
   ['fFno'].forEach(id => $(id).checked = false);
   sigFilter = ''; widthFilter = ''; proxSt = {};
