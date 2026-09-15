@@ -6,6 +6,13 @@ Ships raw features to data.json. Strategy logic (doji breakout,
 rectangle breakout, range-width buckets) lives in the dashboard JS,
 so thresholds can be tuned without re-running this scanner.
 
+Also ships:
+  * "ld"  — NSE listing date, so the dashboard can compute a rolling
+            "listed in the last N years" IPO filter at render time.
+  * "pat" — chart-pattern intel per timeframe (V / U recovery, flag,
+            ascending & descending triangle) with EARLY / DONE stage
+            and a 0-100 quality score. See patterns.py.
+
 One yf.download batch call per chunk (daily 3y), then Weekly/Monthly
 are resampled locally — ~6x fewer network calls than per-ticker history.
 """
@@ -21,12 +28,18 @@ import pandas as pd
 import requests
 import yfinance as yf
 
+import patterns as PAT
+
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 warnings.filterwarnings("ignore")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 CHUNK = 50
 OUT_FILE = "data.json"
+
+MIN_BARS = 60          # normal minimum history
+MIN_BARS_NEW = 25      # relaxed minimum for recently listed IPOs
+NEW_LISTING_YEARS = 3  # keep IPOs this recent even with thin history
 
 # ===============================
 # UNIVERSE: all NSE EQ + F&O flag
@@ -42,6 +55,27 @@ eq = pd.read_csv(pd.io.common.StringIO(resp.text))
 eq.columns = eq.columns.str.strip()
 eq = eq[eq["SERIES"] == "EQ"]
 base_symbols = eq["SYMBOL"].astype(str).str.strip().tolist()
+
+# ---- listing dates (drives the rolling "last N years IPO" filter) ----
+listing = {}
+_ld_col = next((c for c in eq.columns if "LISTING" in c.upper()), None)
+if _ld_col:
+    _raw = eq[_ld_col].astype(str).str.strip()
+    _ld = pd.to_datetime(_raw, format="%d-%b-%Y", errors="coerce")
+    if _ld.notna().sum() < len(_raw) * 0.5:      # NSE changed the format
+        _ld = pd.to_datetime(_raw, errors="coerce", dayfirst=True)
+    for _s, _d in zip(base_symbols, _ld):
+        if pd.notna(_d):
+            listing[_s] = _d.strftime("%Y-%m-%d")
+print(f"Listing dates parsed: {len(listing)}")
+
+_today = datetime.now(IST).date()
+
+def listed_days(base):
+    d = listing.get(base)
+    if not d:
+        return None
+    return (_today - datetime.strptime(d, "%Y-%m-%d").date()).days
 
 fno_set = set()
 for _url in ("https://nsearchives.nseindia.com/content/fo/fo_mktlots.csv",
@@ -187,7 +221,9 @@ def ema_block(closes):
 
 def process_symbol(base, df):
     df = df.dropna(subset=["Close"])
-    if len(df) < 60:
+    ld_days = listed_days(base)
+    is_new = ld_days is not None and ld_days <= NEW_LISTING_YEARS * 365
+    if len(df) < (MIN_BARS_NEW if is_new else MIN_BARS):
         return None
 
     now = datetime.now(IST)
@@ -227,6 +263,7 @@ def process_symbol(base, df):
         "s": base,
         "ltp": r2(ltp),
         "fno": 1 if base in fno_set else 0,
+        "ld": listing.get(base),
         "mMax": m_max, "mMin": m_min, "mW": m_w,
         "wMax": w_max, "wMin": w_min, "wW": w_w,
         "dMax": d_max, "dMin": d_min, "dW": d_w,
@@ -251,6 +288,23 @@ def process_symbol(base, df):
     vol = df["Volume"].dropna()
     comp_vol = vol.iloc[:-1] if daily_is_live else vol
     row["v7"] = r2(comp_vol.tail(7).mean()) if len(comp_vol) else None
+
+    # ---- chart-pattern intel on completed bars of each timeframe ----
+    d_comp = df.iloc[:-1] if daily_is_live else df
+    w_comp = weekly.iloc[:-1] if weekly.index[-1] >= week_start else weekly
+    m_comp = monthly.iloc[:-1] if monthly.index[-1] >= month_start else monthly
+
+    pat = {}
+    for tf, frame in (("d", d_comp), ("w", w_comp), ("m", m_comp)):
+        try:
+            hits = PAT.detect(frame, tf, ltp)
+        except Exception:
+            hits = []
+        if hits:
+            pat[tf] = hits
+    if pat:
+        row["pat"] = pat
+
     return row
 
 

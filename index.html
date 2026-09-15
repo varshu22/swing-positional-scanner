@@ -64,9 +64,18 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .xchip.dn{border-color:var(--dn);color:var(--dn);background:var(--dn-dim)}
 .prox .thwrap{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
 .prox input{width:58px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;outline:none}
-.widths{display:flex;gap:6px;flex-wrap:wrap}
+.widths{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .wchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
 .wchip.on{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
+.ichip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
+.ichip.on{border-color:var(--acc);color:var(--acc);background:var(--acc-dim)}
+.gchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
+.gchip.on{border-color:var(--up);color:var(--up);background:var(--up-dim)}
+.widths input{width:64px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;outline:none}
+.widths .thwrap{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
+.badge .st{font-size:9.5px;letter-spacing:.7px;opacity:.9;border-left:1px solid currentColor;padding-left:6px;margin-left:1px}
+.meta .new{color:var(--acc)}
+.rail .key{position:absolute;top:-2px;bottom:-2px;width:0;border-left:2px solid var(--gold)}
 .freset{margin-top:12px;font-size:12px;color:var(--dn);cursor:pointer;background:none;border:none}
 .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .count{font-family:var(--mono)}
@@ -150,6 +159,24 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
     <div class="chks" style="margin-top:10px">
       <label><input type="checkbox" id="fFno"> F&amp;O only</label>
     </div>
+
+    <div class="fsec">Listing age — rolling window, recalculated against today on every refresh</div>
+    <div class="widths" id="ipos">
+      <span class="ichip on" data-ipo="">Any age</span>
+      <span class="ichip" data-ipo="0.5">IPO &le; 6M</span>
+      <span class="ichip" data-ipo="1">IPO &le; 1Y</span>
+      <span class="ichip" data-ipo="2">IPO &le; 2Y</span>
+      <span class="ichip" data-ipo="3">IPO &le; 3Y</span>
+      <span class="ichip" data-ipo="old">Established &gt; 3Y</span>
+    </div>
+
+    <div class="fsec" id="psec">Pattern intel — stage &amp; quality (S3 only)</div>
+    <div class="widths" id="pstage">
+      <span class="gchip on" data-st="">Any stage</span>
+      <span class="gchip" data-st="E">Early detection</span>
+      <span class="gchip" data-st="D">Done / confirmed</span>
+      <span class="thwrap">min quality <input id="patScore" type="number" value="60" min="0" max="100" step="5"> /100</span>
+    </div>
     <div class="fsec" id="wsec">Rectangle range width</div>
     <div class="widths" id="widths">
       <span class="wchip on" data-w="">Any width</span>
@@ -169,6 +196,7 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <option value="time">Sort: breakout time</option>
       <option value="sym">Sort: symbol</option>
       <option value="rsiD">Sort: RSI daily</option>
+      <option value="score">Sort: pattern quality</option>
       <option value="width">Sort: range width</option>
       <option value="vol">Sort: volume</option>
     </select>
@@ -178,7 +206,8 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
 </main>
 
 <footer>
-  Tapewatch · S1 doji &amp; S2 rectangle breakouts on Day / Week / Month · breakout ≤5% beyond bound, "near" ≤2% inside ·
+  Tapewatch · S1 doji &amp; S2 rectangle breakouts · S3 pattern intel (V / U recovery, flag, ascending &amp; descending triangle,
+  each tagged EARLY or DONE) on Day / Week / Month · listing-age window is rolling and recomputed on every refresh ·
   breakout times from today's 5-min closes · auto-refreshes every 5 min · analysis tool, not investment advice.
 </footer>
 
@@ -206,7 +235,22 @@ const STRATS = {
     { k:'w', lab:'Week · 21 bars',  wtf:'W', get:r=>({max:r.wMax, min:r.wMin, w:r.wW}) },
     { k:'m', lab:'Month · 23 bars', wtf:'M', get:r=>({max:r.mMax, min:r.mMin, w:r.mW}) },
   ]},
+  S3: { label:'S3 · Pattern Intel', kind:'pat', tfs: [
+    { k:'d', lab:'Day' }, { k:'w', lab:'Week' }, { k:'m', lab:'Month' },
+  ]},
 };
+
+/* pattern codes shipped by patterns.py -> display metadata */
+const PAT_META = {
+  V:     { lab:'V RECOVERY',    up:true  },
+  U:     { lab:'U RECOVERY',    up:true  },
+  FLAGU: { lab:'BULL FLAG',     up:true  },
+  FLAGD: { lab:'BEAR FLAG',     up:false },
+  ASCT:  { lab:'ASC TRIANGLE',  up:true  },
+  DESCT: { lab:'DESC TRIANGLE', up:false },
+};
+const patKey = p => p.p === 'FLAG' ? 'FLAG' + p.d : p.p;
+const PAT_SIGNALS = ['V RECOVERY','U RECOVERY','BULL FLAG','BEAR FLAG','ASC TRIANGLE','DESC TRIANGLE'];
 const DOJI_SIGNALS = ['HIGH BO','CLOSE BO','LOW BD','GOLDEN ZONE','DOJI WATCH'];
 const RECT_SIGNALS = ['UPPER BO','NEAR UPPER','LOWER BD','NEAR LOWER','INSIDE'];
 const BT_KEY = { 'HIGH BO':'dh', 'CLOSE BO':'dc', 'LOW BD':'dl', 'UPPER BO':'u', 'LOWER BD':'l' };
@@ -219,6 +263,7 @@ const PROX = {
 };
 
 let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt = {};
+let ipoSel = '', patStage = '';
 
 /* ================= STRATEGY ENGINE ================= */
 const curTF = () => STRATS[strat].tfs[tfIdx];
@@ -259,9 +304,44 @@ function evalRect(r, b, tf) {
   return { sig:'INSIDE', cls:'b-mut', pct:(ltp-b.min)/(b.max-b.min)*100-50, ...base };
 }
 
+/* ---- listing age (rolling, computed against "now" on every render) ---- */
+const YR_MS = 365.25 * 864e5;
+const ldYears = r => r.ld ? (Date.now() - new Date(r.ld + 'T00:00:00').getTime()) / YR_MS : null;
+function ipoOk(r) {
+  if (!ipoSel) return true;
+  const y = ldYears(r);
+  if (y == null) return false;
+  return ipoSel === 'old' ? y > 3 : y <= +ipoSel;
+}
+
+/* ---- S3: pick the best qualifying pattern on the selected timeframe ---- */
+function evalPat(r) {
+  const arr = (r.pat && r.pat[curTF().k]) || [];
+  if (!arr.length) return null;
+  const minSc = +$('patScore').value || 0;
+  const pool = arr.filter(p => p.sc >= minSc && (!patStage || p.st === patStage));
+  if (!pool.length) return null;
+  let p = sigFilter ? pool.find(x => PAT_META[patKey(x)].lab === sigFilter) : null;
+  if (!p) p = pool.reduce((a, b) => (b.sc > a.sc ? b : a));
+  const m = PAT_META[patKey(p)];
+  if (!m) return null;
+  const done = p.st === 'D';
+  return {
+    sig: m.lab, stage: done ? 'DONE' : 'EARLY', sc: p.sc, p, up: m.up,
+    cls: done ? (m.up ? 'b-up' : 'b-dn') : (m.up ? 'b-up2' : 'b-gz'),
+    pct: (() => {
+      const ref = (p.p === 'V' || p.p === 'U') ? p.hi : p.key;
+      return (ref != null && ref !== 0 && r.ltp != null) ? (r.ltp - ref) / ref * 100 : null;
+    })(),
+    lo: p.lo, hi: p.hi, key: p.key,
+  };
+}
+
 function evaluate(r) {
-  const tf = curTF();
-  const ev = STRATS[strat].kind === 'doji' ? evalDoji(r, tf.get(r)) : evalRect(r, tf.get(r), tf.wtf);
+  const tf = curTF(), kind = STRATS[strat].kind;
+  const ev = kind === 'doji' ? evalDoji(r, tf.get(r))
+           : kind === 'rect' ? evalRect(r, tf.get(r), tf.wtf)
+           : evalPat(r);
   if (ev) ev.t = btFor(ev.sig, r);
   return ev;
 }
@@ -287,6 +367,7 @@ function currentList() {
   const th = Math.abs(+$('pTh').value) || 0.3;  // direction comes from the chip; number is always a positive gap
   const out = [];
   for (const r of DATA) {
+    if (!ipoOk(r)) continue;
     const ev = evaluate(r);
     if (!ev || !boOk(ev)) continue;
     if (sigFilter && ev.sig !== sigFilter) continue;
@@ -323,6 +404,7 @@ function currentList() {
     if (key === 'sym')   return a.r.s < b.r.s ? -1 : 1;
     if (key === 'time')  return (a.ev.t ?? '99:99') < (b.ev.t ?? '99:99') ? -1 : 1;
     if (key === 'rsiD')  return (b.r.rsiD ?? -1) - (a.r.rsiD ?? -1);
+    if (key === 'score') return (b.ev.sc ?? -1) - (a.ev.sc ?? -1);
     if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
     if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
     return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
@@ -335,14 +417,39 @@ const fmtVol = v => v == null ? '—'
   : v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L'
   : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
 
+function ageLabel(r) {
+  const y = ldYears(r);
+  if (y == null || y > 3) return '';
+  const txt = y < 1 ? `${Math.round(y * 12)}m` : `${y.toFixed(1)}y`;
+  return `<span class="new">IPO <b>${txt}</b> · ${r.ld}</span>`;
+}
+
+function patMeta(ev) {
+  const p = ev.p;
+  let d = '';
+  if (p.p === 'V' || p.p === 'U')
+    d = `<span>Fall <b>-${p.dd}%</b></span><span>Retraced <b>${p.rc}%</b></span><span>Base <b>${p.bb} bars</b></span>`;
+  else if (p.p === 'FLAG')
+    d = `<span>Pole <b>${p.pl > 0 ? '+' : ''}${p.pl}%</b></span><span>Pullback <b>${p.rt}%</b></span><span>Flag <b>${p.fb} bars</b></span>`;
+  else
+    d = `<span>${p.p === 'ASCT' ? 'Resistance' : 'Support'} <b>${p.lv}</b></span><span>Slope <b>${p.sp > 0 ? '+' : ''}${p.sp}%</b></span><span>Touches <b>${p.tc}</b></span>`;
+  return `<span>Quality <b>${ev.sc}</b></span>${d}`;
+}
+
 function rail(ev, r) {
+  const kind = STRATS[strat].kind;
   let lo, hi, gz = '';
-  if (STRATS[strat].kind === 'doji') { lo = ev.c.l; hi = ev.c.h; } else { lo = ev.min; hi = ev.max; }
+  if (kind === 'doji')      { lo = ev.c.l; hi = ev.c.h; }
+  else if (kind === 'pat')  { lo = ev.lo;  hi = ev.hi;  }
+  else                      { lo = ev.min; hi = ev.max; }
   if (lo == null || hi == null || hi <= lo) return '';
   const span = hi - lo, pad = span * 0.08;
   const L = lo - pad, R = hi + pad, W = R - L;
   const pos = Math.min(100, Math.max(0, (r.ltp - L) / W * 100));
-  if (STRATS[strat].kind === 'doji') {
+  if (kind === 'pat' && ev.key != null) {
+    gz = `<div class="key" style="left:${Math.min(100, Math.max(0, (ev.key - L) / W * 100))}%"></div>`;
+  }
+  if (kind === 'doji') {
     const g1 = (Math.min(ev.c.f50, ev.c.f618) - L) / W * 100;
     const g2 = (Math.max(ev.c.f50, ev.c.f618) - L) / W * 100;
     gz = `<div class="gz" style="left:${g1}%;width:${g2-g1}%"></div>`;
@@ -354,11 +461,28 @@ function rail(ev, r) {
 }
 
 function render() {
+  const kind = STRATS[strat].kind;
   const list = currentList();
   $('count').textContent = `${list.length} stocks`;
-  const sigs = STRATS[strat].kind === 'doji' ? DOJI_SIGNALS : RECT_SIGNALS;
+  const sigs = kind === 'doji' ? DOJI_SIGNALS : kind === 'rect' ? RECT_SIGNALS : PAT_SIGNALS;
   const counts = Object.fromEntries(sigs.map(s => [s, 0]));
-  for (const r of DATA) { const ev = evaluate(r); if (ev && boOk(ev) && counts[ev.sig] != null) counts[ev.sig]++; }
+  if (kind === 'pat') {
+    const minSc = +$('patScore').value || 0;
+    for (const r of DATA) {
+      if (!ipoOk(r)) continue;
+      for (const p of (r.pat && r.pat[curTF().k]) || []) {
+        if (p.sc < minSc || (patStage && p.st !== patStage)) continue;
+        const m = PAT_META[patKey(p)];
+        if (m && counts[m.lab] != null) counts[m.lab]++;
+      }
+    }
+  } else {
+    for (const r of DATA) {
+      if (!ipoOk(r)) continue;
+      const ev = evaluate(r);
+      if (ev && boOk(ev) && counts[ev.sig] != null) counts[ev.sig]++;
+    }
+  }
   $('pulse').innerHTML =
     `<span class="pchip ${sigFilter===''?'on':''}" data-sig="">All<b>${Object.values(counts).reduce((a,b)=>a+b,0)}</b></span>` +
     sigs.map(s => `<span class="pchip ${sigFilter===s?'on':''}" data-sig="${s}">${s}<b>${counts[s]}</b></span>`).join('');
@@ -369,16 +493,19 @@ function render() {
   rowsEl.innerHTML = list.slice(0, 400).map(({ r, ev }) => {
     const pct = ev.pct == null ? '' : `<span class="pct">${ev.pct >= 0 ? '+' : ''}${ev.pct.toFixed(2)}%</span>`;
     const bt = ev.t ? `<span class="bt">· ${ev.t}</span>` : '';
-    const wtag = STRATS[strat].kind === 'rect' ? `<span class="wtag">W <b>${ev.w}%</b> ${BUCKET_LABEL[ev.wb]||''}</span>` : '';
-    const gzTag = STRATS[strat].kind === 'doji' ? `<span>GZ <b>${ev.c.f50}–${ev.c.f618}</b></span>` : '';
+    const wtag = kind === 'rect' ? `<span class="wtag">W <b>${ev.w}%</b> ${BUCKET_LABEL[ev.wb]||''}</span>` : '';
+    const gzTag = kind === 'doji' ? `<span>GZ <b>${ev.c.f50}–${ev.c.f618}</b></span>` : '';
+    const stTag = kind === 'pat' ? `<span class="st">${ev.stage}</span>` : '';
+    const patTag = kind === 'pat' ? patMeta(ev) : '';
+    const ageTag = ageLabel(r);
     return `<div class="card">
       <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}<span class="sec">${r.fno ? 'F&O' : ''}</span></a>
       <div class="ltp">${r.ltp}</div>
       <div></div>
-      <div class="badge ${ev.cls}">${ev.sig} ${pct}${bt}</div>
+      <div class="badge ${ev.cls}">${ev.sig} ${pct}${bt}${stTag}</div>
       ${rail(ev, r)}
       <div class="meta">
-        ${wtag}${gzTag}
+        ${wtag}${gzTag}${patTag}${ageTag}
         <span>RSI D <b>${r.rsiD ?? '—'}</b></span><span>W <b>${r.rsiW ?? '—'}</b></span>
         <span>M <b>${r.rsiM ?? '—'}</b></span>
         <span>E9 <b>${emaOf(r,'e9') ?? '—'}</b></span><span>E21 <b>${emaOf(r,'e21') ?? '—'}</b></span><span>VWAP <b>${r.vwap ?? '—'}</b></span><span>Vol <b>${fmtVol(r.v7)}</b></span>
@@ -396,19 +523,31 @@ function drawPath() {
     STRATS[strat].tfs.map((t, i) =>
       `<span class="tchip ${i===tfIdx?'on':''}" data-i="${i}">${t.lab}</span>`).join('');
   document.querySelectorAll('.schip').forEach(c => c.onclick = () => {
-    strat = c.dataset.id; tfIdx = 0; sigFilter = ''; drawPath(); render();
+    strat = c.dataset.id; tfIdx = 0; sigFilter = '';
+    if (STRATS[strat].kind === 'pat' && $('sort').value === 'pct') $('sort').value = 'score';
+    drawPath(); render();
   });
   document.querySelectorAll('.tchip').forEach(c => c.onclick = () => {
     tfIdx = +c.dataset.i; sigFilter = ''; drawPath(); render();
   });
-  const isRect = STRATS[strat].kind === 'rect';
-  $('widths').style.display = isRect ? 'flex' : 'none';
-  $('wsec').style.display = isRect ? 'block' : 'none';
+  const k = STRATS[strat].kind;
+  $('widths').style.display = k === 'rect' ? 'flex' : 'none';
+  $('wsec').style.display   = k === 'rect' ? 'block' : 'none';
+  $('pstage').style.display = k === 'pat'  ? 'flex' : 'none';
+  $('psec').style.display   = k === 'pat'  ? 'block' : 'none';
 }
 
 document.querySelectorAll('.wchip').forEach(w => w.onclick = () => {
   document.querySelectorAll('.wchip').forEach(x => x.classList.remove('on'));
   w.classList.add('on'); widthFilter = w.dataset.w; render();
+});
+document.querySelectorAll('.ichip').forEach(w => w.onclick = () => {
+  document.querySelectorAll('.ichip').forEach(x => x.classList.remove('on'));
+  w.classList.add('on'); ipoSel = w.dataset.ipo; render();
+});
+document.querySelectorAll('.gchip').forEach(w => w.onclick = () => {
+  document.querySelectorAll('.gchip').forEach(x => x.classList.remove('on'));
+  w.classList.add('on'); patStage = w.dataset.st; render();
 });
 const PROX_GLYPH = ['', ' ±', ' ↑', ' ↓'];
 function drawProx() {
@@ -429,17 +568,20 @@ document.querySelectorAll('.xchip').forEach(x => {
   };
 });
 $('ftoggle').onclick = () => { $('fpanel').classList.toggle('open'); $('ftoggle').classList.toggle('active'); };
-const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol','boMin','boMax'];
+const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol','boMin','boMax','patScore'];
 TXT.forEach(id => $(id).oninput = render);
 ['fCandle','sort'].forEach(id => $(id).onchange = render);
 ['fFno'].forEach(id => $(id).onchange = render);
 $('freset').onclick = () => {
   TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3'; $('boMax').value = '5';
+  $('patScore').value = '60';
   $('fCandle').value = '';
   ['fFno'].forEach(id => $(id).checked = false);
-  sigFilter = ''; widthFilter = ''; proxSt = {};
+  sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = '';
   drawProx();
   document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
+  document.querySelectorAll('.ichip').forEach(w => w.classList.toggle('on', w.dataset.ipo === ''));
+  document.querySelectorAll('.gchip').forEach(w => w.classList.toggle('on', w.dataset.st === ''));
   render();
 };
 $('copyBtn').onclick = () => {
