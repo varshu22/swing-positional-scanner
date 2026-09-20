@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Tapewatch — Swing / Positional</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -18,7 +19,7 @@
   --disp:'Sora',system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);-webkit-font-smoothing:antialiased;padding-bottom:60px}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);-webkit-font-smoothing:antialiased;padding-bottom:120px}
 a{color:inherit;text-decoration:none}
 button,select,input{font-family:inherit}
 header{position:sticky;top:0;z-index:20;background:rgba(11,15,21,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px}
@@ -77,13 +78,13 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .meta .new{color:var(--acc)}
 .rail .key{position:absolute;top:-2px;bottom:-2px;width:0;border-left:2px solid var(--gold)}
 .freset{margin-top:12px;font-size:12px;color:var(--dn);cursor:pointer;background:none;border:none}
-.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted)}
+.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .count{font-family:var(--mono)}
 .toolbar select{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px}
 .copy{padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-size:11.5px;cursor:pointer}
 .copy:active{color:var(--acc);border-color:var(--acc)}
 .rows{display:flex;flex-direction:column;gap:8px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .sym{font-weight:700;font-size:15px;letter-spacing:.3px}
 .sec{font-size:10px;color:var(--muted);display:block;font-weight:400;margin-top:1px}
 .ltp{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right}
@@ -106,6 +107,27 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:13px}
 .loading{text-align:center;color:var(--muted);padding:60px 0}
 footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:var(--muted);text-align:center}
+
+/* retrace chips (S3) */
+.rchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
+.rchip.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+/* card selection */
+.symcell{display:flex;align-items:center;gap:8px;min-width:0}
+.pick{display:flex;align-items:center;justify-content:center;width:32px;height:32px;margin:-6px 0 -6px -8px;cursor:pointer;flex:none}
+.pick input{width:18px;height:18px;accent-color:var(--acc);cursor:pointer}
+.card.sel{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+/* excel action bar */
+.xbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;background:rgba(17,24,38,.97);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+.xbar.show{display:block}
+.xin{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:8px}
+.xcount{flex:1;font-size:13px;font-weight:600}
+.xcount b{font-family:var(--mono);color:var(--acc)}
+.xbtn{padding:9px 16px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#0B0F15;font-weight:700;font-size:12.5px;cursor:pointer}
+.xghost{padding:9px 13px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer}
+.xsub{max-width:1100px;margin:6px auto 0;font-size:11px;color:var(--muted)}
+.xlink{background:none;border:none;color:var(--dn);font-size:11px;cursor:pointer;margin-left:6px;text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:104px;transform:translateX(-50%);z-index:40;max-width:calc(100% - 32px);background:var(--panel2);border:1px solid var(--acc);color:var(--text);padding:9px 14px;border-radius:10px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
 @media(min-width:760px){.rows{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 </style>
 </head>
@@ -177,6 +199,19 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <span class="gchip" data-st="D">Done / confirmed</span>
       <span class="thwrap">min quality <input id="patScore" type="number" value="60" min="0" max="100" step="5"> /100</span>
     </div>
+
+    <div class="fsec" id="rsec">Retrace level — V / U: % of the fall recovered · Flag: % of the pole pulled back · triangles have no retrace, so they drop out once this is set</div>
+    <div class="widths" id="rtWrap">
+      <span class="rchip on" data-rt=",">Any</span>
+      <span class="rchip" data-rt=",23.6">&le; 23.6</span>
+      <span class="rchip" data-rt="23.6,38.2">23.6–38.2</span>
+      <span class="rchip" data-rt="38.2,50">38.2–50</span>
+      <span class="rchip" data-rt="50,61.8">50–61.8</span>
+      <span class="rchip" data-rt="61.8,78.6">61.8–78.6</span>
+      <span class="rchip" data-rt="78.6,100">78.6–100</span>
+      <span class="rchip" data-rt="100,">&ge; 100</span>
+      <span class="thwrap">min <input id="rtMin" type="number" placeholder="any" step="0.1" min="0"> max <input id="rtMax" type="number" placeholder="any" step="0.1" min="0"> %</span>
+    </div>
     <div class="fsec" id="wsec">Rectangle range width</div>
     <div class="widths" id="widths">
       <span class="wchip on" data-w="">Any width</span>
@@ -191,12 +226,14 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
   <div class="toolbar">
     <span class="count" id="count">—</span>
     <button class="copy" id="copyBtn">Copy symbols</button>
+    <button class="copy" id="selAll">Select all</button>
     <select id="sort">
       <option value="pct">Sort: distance %</option>
       <option value="time">Sort: breakout time</option>
       <option value="sym">Sort: symbol</option>
       <option value="rsiD">Sort: RSI daily</option>
       <option value="score">Sort: pattern quality</option>
+      <option value="rt">Sort: retrace %</option>
       <option value="width">Sort: range width</option>
       <option value="vol">Sort: volume</option>
     </select>
@@ -204,6 +241,16 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
 
   <div class="rows" id="rows"><div class="loading">Loading data.json…</div></div>
 </main>
+
+<div class="xbar" id="xbar">
+  <div class="xin">
+    <span class="xcount" id="xcount"></span>
+    <button class="xghost" id="xclear">Clear</button>
+    <button class="xbtn" id="xdl">Download Excel</button>
+  </div>
+  <div class="xsub"><span id="xsub"></span><button class="xlink" id="xreset">Start fresh</button></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <footer>
   Tapewatch · S1 doji &amp; S2 rectangle breakouts · S3 pattern intel (V / U recovery, flag, ascending &amp; descending triangle,
@@ -264,6 +311,8 @@ const PROX = {
 
 let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt = {};
 let ipoSel = '', patStage = '';
+let VIEW = [];                 // rows currently drawn as cards (same order as the DOM)
+const selected = new Map();    // key -> export-row snapshot taken at the moment a card was ticked
 
 /* ================= STRATEGY ENGINE ================= */
 const curTF = () => STRATS[strat].tfs[tfIdx];
@@ -315,11 +364,30 @@ function ipoOk(r) {
 }
 
 /* ---- S3: pick the best qualifying pattern on the selected timeframe ---- */
-function evalPat(r) {
+/* retrace % — V/U: how much of the fall has been recovered (rc) · Flag: how much of the pole was given back (rt) */
+const retraceOf = p => (p.p === 'V' || p.p === 'U') ? p.rc : p.p === 'FLAG' ? p.rt : null;
+
+/* every pattern on the selected timeframe that passes quality / stage / retrace */
+function patPool(r) {
   const arr = (r.pat && r.pat[curTF().k]) || [];
-  if (!arr.length) return null;
+  if (!arr.length) return [];
   const minSc = +$('patScore').value || 0;
-  const pool = arr.filter(p => p.sc >= minSc && (!patStage || p.st === patStage));
+  const rMin = $('rtMin').value, rMax = $('rtMax').value, rtOn = rMin !== '' || rMax !== '';
+  return arr.filter(p => {
+    if (p.sc < minSc) return false;
+    if (patStage && p.st !== patStage) return false;
+    if (rtOn) {
+      const rc = retraceOf(p);
+      if (rc == null) return false;                     // triangles: no retrace value
+      if (rMin !== '' && rc < +rMin) return false;
+      if (rMax !== '' && rc > +rMax) return false;
+    }
+    return true;
+  });
+}
+
+function evalPat(r) {
+  const pool = patPool(r);
   if (!pool.length) return null;
   let p = sigFilter ? pool.find(x => PAT_META[patKey(x)].lab === sigFilter) : null;
   if (!p) p = pool.reduce((a, b) => (b.sc > a.sc ? b : a));
@@ -333,7 +401,7 @@ function evalPat(r) {
       const ref = (p.p === 'V' || p.p === 'U') ? p.hi : p.key;
       return (ref != null && ref !== 0 && r.ltp != null) ? (r.ltp - ref) / ref * 100 : null;
     })(),
-    lo: p.lo, hi: p.hi, key: p.key,
+    lo: p.lo, hi: p.hi, key: p.key, rt: retraceOf(p),
   };
 }
 
@@ -405,6 +473,7 @@ function currentList() {
     if (key === 'time')  return (a.ev.t ?? '99:99') < (b.ev.t ?? '99:99') ? -1 : 1;
     if (key === 'rsiD')  return (b.r.rsiD ?? -1) - (a.r.rsiD ?? -1);
     if (key === 'score') return (b.ev.sc ?? -1) - (a.ev.sc ?? -1);
+    if (key === 'rt')    return (b.ev.rt ?? -1) - (a.ev.rt ?? -1);
     if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
     if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
     return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
@@ -463,15 +532,15 @@ function rail(ev, r) {
 function render() {
   const kind = STRATS[strat].kind;
   const list = currentList();
+  VIEW = list.slice(0, 400);
+  syncSelectUI();
   $('count').textContent = `${list.length} stocks`;
   const sigs = kind === 'doji' ? DOJI_SIGNALS : kind === 'rect' ? RECT_SIGNALS : PAT_SIGNALS;
   const counts = Object.fromEntries(sigs.map(s => [s, 0]));
   if (kind === 'pat') {
-    const minSc = +$('patScore').value || 0;
     for (const r of DATA) {
       if (!ipoOk(r)) continue;
-      for (const p of (r.pat && r.pat[curTF().k]) || []) {
-        if (p.sc < minSc || (patStage && p.st !== patStage)) continue;
+      for (const p of patPool(r)) {
         const m = PAT_META[patKey(p)];
         if (m && counts[m.lab] != null) counts[m.lab]++;
       }
@@ -490,7 +559,7 @@ function render() {
 
   const rowsEl = $('rows');
   if (!list.length) { rowsEl.innerHTML = '<div class="empty">No stocks match. Loosen a filter or pick another signal chip.</div>'; return; }
-  rowsEl.innerHTML = list.slice(0, 400).map(({ r, ev }) => {
+  rowsEl.innerHTML = VIEW.map(({ r, ev }, i) => {
     const pct = ev.pct == null ? '' : `<span class="pct">${ev.pct >= 0 ? '+' : ''}${ev.pct.toFixed(2)}%</span>`;
     const bt = ev.t ? `<span class="bt">· ${ev.t}</span>` : '';
     const wtag = kind === 'rect' ? `<span class="wtag">W <b>${ev.w}%</b> ${BUCKET_LABEL[ev.wb]||''}</span>` : '';
@@ -498,8 +567,10 @@ function render() {
     const stTag = kind === 'pat' ? `<span class="st">${ev.stage}</span>` : '';
     const patTag = kind === 'pat' ? patMeta(ev) : '';
     const ageTag = ageLabel(r);
-    return `<div class="card">
-      <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}<span class="sec">${r.fno ? 'F&O' : ''}</span></a>
+    const on = selected.has(selKey(r));
+    return `<div class="card${on ? ' sel' : ''}" data-i="${i}">
+      <div class="symcell"><label class="pick" title="Select for Excel"><input type="checkbox"${on ? ' checked' : ''} aria-label="Select ${r.s}"></label>
+      <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}<span class="sec">${r.fno ? 'F&O' : ''}</span></a></div>
       <div class="ltp">${r.ltp}</div>
       <div></div>
       <div class="badge ${ev.cls}">${ev.sig} ${pct}${bt}${stTag}</div>
@@ -535,6 +606,8 @@ function drawPath() {
   $('wsec').style.display   = k === 'rect' ? 'block' : 'none';
   $('pstage').style.display = k === 'pat'  ? 'flex' : 'none';
   $('psec').style.display   = k === 'pat'  ? 'block' : 'none';
+  $('rtWrap').style.display = k === 'pat'  ? 'flex'  : 'none';
+  $('rsec').style.display   = k === 'pat'  ? 'block' : 'none';
 }
 
 document.querySelectorAll('.wchip').forEach(w => w.onclick = () => {
@@ -575,6 +648,7 @@ TXT.forEach(id => $(id).oninput = render);
 $('freset').onclick = () => {
   TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3'; $('boMax').value = '5';
   $('patScore').value = '60';
+  $('rtMin').value = ''; $('rtMax').value = ''; syncRt();
   $('fCandle').value = '';
   ['fFno'].forEach(id => $(id).checked = false);
   sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = '';
@@ -590,6 +664,223 @@ $('copyBtn').onclick = () => {
     $('copyBtn').textContent = 'Copied!';
     setTimeout(() => $('copyBtn').textContent = 'Copy symbols', 1200);
   });
+};
+
+/* ================= RETRACE FILTER WIRING ================= */
+function syncRt() {   // highlight the preset chip that matches the min / max boxes (none if custom)
+  const cur = $('rtMin').value.trim() + ',' + $('rtMax').value.trim();
+  document.querySelectorAll('.rchip').forEach(c => c.classList.toggle('on', c.dataset.rt === cur));
+}
+document.querySelectorAll('.rchip').forEach(c => c.onclick = () => {
+  const [a, b] = c.dataset.rt.split(',');
+  $('rtMin').value = a; $('rtMax').value = b; syncRt(); render();
+});
+['rtMin', 'rtMax'].forEach(id => $(id).oninput = () => { syncRt(); render(); });
+
+/* ================= SELECT CARDS + DAILY EXCEL ================= */
+const TV_URL = 'https://www.tradingview.com/chart/?symbol=NSE:';
+const XL_KEY = 'tapewatch_xl_';               // + IST date -> that day's accumulated rows
+const memStore = {};                          // fallback when the browser blocks localStorage
+
+function istParts(opts) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', ...opts }).formatToParts(new Date());
+}
+function istDay() {
+  const p = istParts({ year: 'numeric', month: '2-digit', day: '2-digit' });
+  const g = t => p.find(x => x.type === t).value;
+  return `${g('year')}-${g('month')}-${g('day')}`;
+}
+function istTime() {
+  const p = istParts({ hour: '2-digit', minute: '2-digit' });
+  return p.find(x => x.type === 'hour').value + ':' + p.find(x => x.type === 'minute').value;
+}
+
+function xlLoad(day) {
+  try { const s = localStorage.getItem(XL_KEY + day); if (s) return JSON.parse(s); } catch (e) {}
+  return memStore[day] || { n: 0, rows: [] };
+}
+function xlSave(day, st) {
+  memStore[day] = st;
+  try { localStorage.setItem(XL_KEY + day, JSON.stringify(st)); return true; } catch (e) { return false; }
+}
+function xlPrune() {                          // a new IST day starts a new file — drop older days
+  try {
+    const keep = XL_KEY + istDay();
+    Object.keys(localStorage).filter(k => k.startsWith(XL_KEY) && k !== keep).forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
+}
+xlPrune();
+
+const selKey = r => `${strat}|${curTF().k}|${r.s}`;
+
+/* plain-text description of every filter that is active right now */
+function filterSummary() {
+  const kind = STRATS[strat].kind, parts = [], v = id => $(id).value.trim();
+  const rng = (lab, a, b, u = '') => {
+    if (a !== '' && b !== '') parts.push(`${lab} ${a}–${b}${u}`);
+    else if (a !== '') parts.push(`${lab} ≥ ${a}${u}`);
+    else if (b !== '') parts.push(`${lab} ≤ ${b}${u}`);
+  };
+  if (sigFilter) parts.push('Signal: ' + sigFilter);
+  if (kind === 'pat') {
+    if (patStage) parts.push('Stage: ' + (patStage === 'E' ? 'Early' : 'Done'));
+    parts.push('Quality ≥ ' + (+v('patScore') || 0));
+    rng('Retrace', v('rtMin'), v('rtMax'), '%');
+  }
+  if (kind === 'rect') {
+    if (widthFilter) parts.push('Width: ' + BUCKET_LABEL[widthFilter]);
+    rng('BO dist', v('boMin'), v('boMax'), '%');
+  }
+  if (v('tFrom') || v('tTo')) parts.push(`BO time ${v('tFrom') || '…'}–${v('tTo') || '…'}`);
+  const px = [];
+  document.querySelectorAll('.xchip').forEach(x => {
+    const st = proxSt[x.dataset.px] || 0;
+    if (st) px.push(x.dataset.base + PROX_GLYPH[st]);
+  });
+  if (px.length) parts.push(`Cross (${curTF().lab.split(' · ')[0]}): ${px.join(', ')} gap ≤ ${Math.abs(+v('pTh')) || 0.3}%`);
+  rng('RSI D', v('rsiDmin'), v('rsiDmax'));
+  rng('RSI W', v('rsiWmin'), v('rsiWmax'));
+  rng('RSI M', v('rsiMmin'), v('rsiMmax'));
+  if (v('fCandle')) parts.push('Prev candle: ' + v('fCandle'));
+  if (v('fVol')) parts.push('Vol ≥ ' + v('fVol'));
+  if ($('fFno').checked) parts.push('F&O only');
+  const ipo = document.querySelector('.ichip.on');
+  if (ipoSel && ipo) parts.push(ipo.textContent.trim());
+  if (v('search')) parts.push('Search: ' + v('search'));
+  return parts.join(' | ') || 'None';
+}
+
+/* snapshot of one card, exactly as it looked when it was ticked */
+function exportRow(r, ev, fs, at) {
+  const kind = STRATS[strat].kind, tf = curTF();
+  let lo = null, hi = null, key = null, width = null;
+  if (kind === 'doji')      { lo = ev.c.l; hi = ev.c.h; key = ev.c.c; }
+  else if (kind === 'rect') { lo = ev.min; hi = ev.max; width = ev.w; }
+  else                      { lo = ev.lo;  hi = ev.hi;  key = ev.key; }
+  return {
+    sym: r.s, picked: at, strat: STRATS[strat].label, tf: tf.lab.split(' · ')[0], sig: ev.sig,
+    stage: kind === 'pat' ? ev.stage : '', ltp: r.ltp,
+    pct: ev.pct == null ? null : +ev.pct.toFixed(2), bt: ev.t || '',
+    score: ev.sc ?? null, rt: ev.rt ?? null, lo, hi, key, width,
+    rsiD: r.rsiD, rsiW: r.rsiW, rsiM: r.rsiM,
+    e9: emaOf(r, 'e9'), e21: emaOf(r, 'e21'), vwap: r.vwap, v7: r.v7,
+    fno: r.fno ? 'Yes' : 'No', ld: r.ld || '', filters: fs,
+  };
+}
+const dedupeKey = x => [x.sym, x.strat, x.tf, x.sig, x.filters].join('|');
+
+/* tick / untick */
+$('rows').addEventListener('change', e => {
+  if (!e.target.matches('.pick input')) return;
+  const card = e.target.closest('.card'), item = VIEW[+card.dataset.i];
+  if (!item) return;
+  if (e.target.checked) selected.set(selKey(item.r), exportRow(item.r, item.ev, filterSummary(), istTime()));
+  else selected.delete(selKey(item.r));
+  card.classList.toggle('sel', e.target.checked);
+  syncSelectUI();
+});
+/* tapping anywhere else on the card toggles it too (symbol link still opens the chart) */
+$('rows').addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card || e.target.closest('a, .pick')) return;
+  if (String(window.getSelection ? window.getSelection() : '')) return;   // user is highlighting text
+  card.querySelector('.pick input').click();
+});
+$('selAll').onclick = () => {
+  const all = VIEW.length && VIEW.every(x => selected.has(selKey(x.r)));
+  if (all) VIEW.forEach(x => selected.delete(selKey(x.r)));
+  else { const fs = filterSummary(), at = istTime(); VIEW.forEach(x => selected.set(selKey(x.r), exportRow(x.r, x.ev, fs, at))); }
+  render();
+};
+$('xclear').onclick = () => { selected.clear(); render(); };
+
+function syncSelectUI() {
+  const n = selected.size, st = xlLoad(istDay());
+  $('xbar').classList.toggle('show', n > 0 || st.rows.length > 0);
+  $('xcount').innerHTML = n ? `<b>${n}</b> selected` : `<b>${st.rows.length}</b> rows saved today`;
+  $('xclear').style.display = n ? '' : 'none';
+  $('xdl').textContent = n ? 'Add & download Excel' : "Download today's file";
+  $('xsub').textContent = st.rows.length
+    ? `Today's file: ${st.rows.length} rows from ${st.n} download${st.n === 1 ? '' : 's'}. New picks are added to it.`
+    : 'First download today starts the file. Later ones add to it.';
+  $('xreset').style.display = st.rows.length ? '' : 'none';
+  const all = VIEW.length && VIEW.every(x => selected.has(selKey(x.r)));
+  $('selAll').textContent = all ? 'Deselect all' : 'Select all';
+}
+
+let toastT;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3600);
+}
+
+/* [header, row-key, width] */
+const XL_COLS = [
+  ['Symbol','sym',12], ['Picked at (IST)','picked',14], ['Strategy','strat',20], ['Timeframe','tf',10],
+  ['Signal','sig',16], ['Stage','stage',9], ['LTP','ltp',10], ['Distance %','pct',11],
+  ['Breakout time','bt',13], ['Quality','score',9], ['Retrace %','rt',10],
+  ['Range low','lo',10], ['Range high','hi',10], ['Key level','key',10], ['Range width %','width',13],
+  ['RSI D','rsiD',7], ['RSI W','rsiW',7], ['RSI M','rsiM',7],
+  ['EMA 9','e9',9], ['EMA 21','e21',9], ['VWAP','vwap',9], ['7d avg vol','v7',12],
+  ['F&O','fno',6], ['Listed on','ld',12], ['Filters applied','filters',70], ['Batch','batch',7],
+];
+
+function buildWorkbook(st) {
+  const aoa = [XL_COLS.map(c => c[0]), ...st.rows.map(r => XL_COLS.map(c => r[c[1]] ?? ''))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = XL_COLS.map(c => ({ wch: c[2] }));
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: XL_COLS.length - 1 } }) };
+  st.rows.forEach((r, i) => {                 // symbol cell opens the TradingView chart
+    const cell = ws['A' + (i + 2)];
+    if (cell) cell.l = { Target: TV_URL + encodeURIComponent(r.sym), Tooltip: 'Open chart' };
+  });
+
+  const groups = new Map();                   // one line per download + filter combination
+  for (const r of st.rows) {
+    const k = [r.batch, r.strat, r.tf, r.filters].join('|');
+    if (!groups.has(k)) groups.set(k, { batch: r.batch, dl: r.dl, strat: r.strat, tf: r.tf, filters: r.filters, syms: [] });
+    groups.get(k).syms.push(r.sym);
+  }
+  const ba = [['Batch','Downloaded at (IST)','Strategy','Timeframe','Filters applied','Stocks','Symbols'],
+    ...[...groups.values()].map(g => [g.batch, g.dl, g.strat, g.tf, g.filters, g.syms.length, g.syms.join(', ')])];
+  const bs = XLSX.utils.aoa_to_sheet(ba);
+  bs['!cols'] = [{ wch: 7 }, { wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 70 }, { wch: 8 }, { wch: 60 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Picks');
+  XLSX.utils.book_append_sheet(wb, bs, 'Batches');
+  return wb;
+}
+
+function downloadExcel() {
+  if (typeof XLSX === 'undefined') { toast('Excel library did not load. Check your connection and reload the page.'); return; }
+  const day = istDay(), st = xlLoad(day);
+  let added = 0, dupes = 0, saved = true;
+  if (selected.size) {
+    const seen = new Set(st.rows.map(dedupeKey)), n = st.n + 1, dl = istTime();
+    for (const row of selected.values()) {
+      const k = dedupeKey(row);
+      if (seen.has(k)) { dupes++; continue; }
+      seen.add(k); st.rows.push({ ...row, batch: n, dl }); added++;
+    }
+    if (added) { st.n = n; saved = xlSave(day, st); }
+  }
+  if (!st.rows.length) return;
+  XLSX.writeFile(buildWorkbook(st), `Tapewatch_${day}.xlsx`);
+  let msg = added ? `Added ${added} stock${added === 1 ? '' : 's'}` : 'Nothing new to add';
+  if (dupes) msg += `, ${dupes} already in the file`;
+  msg += ` · file has ${st.rows.length} rows`;
+  if (!saved) msg += ' · browser storage is blocked, so this only accumulates while the tab stays open';
+  toast(msg);
+  selected.clear();
+  render();
+}
+$('xdl').onclick = downloadExcel;
+$('xreset').onclick = () => {
+  if (!confirm("Delete today's saved Excel rows and start a fresh file?")) return;
+  const day = istDay(); delete memStore[day];
+  try { localStorage.removeItem(XL_KEY + day); } catch (e) {}
+  syncSelectUI(); toast("Started a fresh file for today");
 };
 
 /* ================= LOAD + AUTO-REFRESH ================= */
