@@ -108,6 +108,13 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .loading{text-align:center;color:var(--muted);padding:60px 0}
 footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:var(--muted);text-align:center}
 
+/* circuit / band / series chips */
+.meta .cu{color:var(--up)} .meta .cl{color:var(--dn)} .meta .sv{color:var(--gold)}
+.sec .t2t{color:var(--gold);margin-left:4px}
+.cchip,.bchip,.srchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
+.cchip.on{border-color:var(--up);color:var(--up);background:var(--up-dim)}
+.cchip.lc.on{border-color:var(--dn);color:var(--dn);background:var(--dn-dim)}
+.bchip.on,.srchip.on{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
 /* retrace chips (S3) */
 .rchip{padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer}
 .rchip.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
@@ -192,6 +199,36 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <span class="ichip" data-ipo="old">Established &gt; 3Y</span>
     </div>
 
+    <div class="fsec">Circuit state — today, against the exact tick-rounded band price</div>
+    <div class="widths" id="circs">
+      <span class="cchip on" data-c="">Any</span>
+      <span class="cchip" data-c="U-LOCK">UC locked</span>
+      <span class="cchip" data-c="U-TOUCH">UC hit &amp; opened</span>
+      <span class="cchip" data-c="U-NEAR">Near UC &le;1%</span>
+      <span class="cchip lc" data-c="L-LOCK">LC locked</span>
+      <span class="cchip lc" data-c="L-TOUCH">LC hit &amp; opened</span>
+      <span class="cchip lc" data-c="L-NEAR">Near LC &le;1%</span>
+      <span class="cchip" data-c="NONE">Exclude circuit stocks</span>
+    </div>
+    <div class="fsec">Price band &amp; series</div>
+    <div class="widths" id="bands">
+      <span class="bchip on" data-b="">Any band</span>
+      <span class="bchip" data-b="2">2%</span>
+      <span class="bchip" data-b="5">5%</span>
+      <span class="bchip" data-b="10">10%</span>
+      <span class="bchip" data-b="20">20%</span>
+      <span class="bchip" data-b="NB">No band (F&amp;O)</span>
+    </div>
+    <div class="widths" id="series" style="margin-top:8px">
+      <span class="srchip on" data-sr="">All series</span>
+      <span class="srchip" data-sr="EQ">EQ only</span>
+      <span class="srchip" data-sr="T2T">Trade-to-trade only (BE / BZ)</span>
+    </div>
+    <div class="chks" style="margin-top:10px">
+      <label><input type="checkbox" id="fNoSurv"> Hide ASM / GSM flagged</label>
+      <label><input type="checkbox" id="fNoCp"> Skip circuit-prone (&ge;3 circuit closes in 20 days)</label>
+    </div>
+
     <div class="fsec" id="psec">Pattern intel — stage &amp; quality (S3 only)</div>
     <div class="widths" id="pstage">
       <span class="gchip on" data-st="">Any stage</span>
@@ -234,6 +271,7 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <option value="rsiD">Sort: RSI daily</option>
       <option value="score">Sort: pattern quality</option>
       <option value="rt">Sort: retrace %</option>
+      <option value="chg">Sort: % change today</option>
       <option value="width">Sort: range width</option>
       <option value="vol">Sort: volume</option>
     </select>
@@ -255,6 +293,8 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
 <footer>
   Tapewatch · S1 doji &amp; S2 rectangle breakouts · S3 pattern intel (V / U recovery, flag, ascending &amp; descending triangle,
   each tagged EARLY or DONE) on Day / Week / Month · listing-age window is rolling and recomputed on every refresh ·
+  circuit price = prev close ± band, rounded inside the band to NSE tick size (why 5% stocks lock at 4.9x%) ·
+  BE / BZ = trade-to-trade, no intraday ·
   breakout times from today's 5-min closes · auto-refreshes every 5 min · analysis tool, not investment advice.
 </footer>
 
@@ -268,6 +308,7 @@ const CFG = {
     M: { VN: 25, N: 50, M: 100 },
   },
   STALE_HOURS: 30,
+  NEAR_UC: 1,
   REFRESH_MS: 5 * 60 * 1000,
 };
 
@@ -310,7 +351,7 @@ const PROX = {
 };
 
 let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt = {};
-let ipoSel = '', patStage = '';
+let ipoSel = '', patStage = '', circSel = '', bandSel = '', srSel = '';
 let VIEW = [];                 // rows currently drawn as cards (same order as the DOM)
 const selected = new Map();    // key -> export-row snapshot taken at the moment a card was ticked
 
@@ -361,6 +402,35 @@ function ipoOk(r) {
   const y = ldYears(r);
   if (y == null) return false;
   return ipoSel === 'old' ? y > 3 : y <= +ipoSel;
+}
+
+/* ---- circuit state vs the tick-rounded band price shipped by the scanner ---- */
+function circ(r) {
+  if (r.band == null || r.uc == null || r.ltp == null) return null;
+  const eps = (r.tk || 0.05) + 1e-9;                 // one-tick tolerance for rounding convention
+  if (r.ltp >= r.uc - eps) return { s:'U', st:'LOCK' };
+  if (r.ltp <= r.lc + eps) return { s:'L', st:'LOCK' };
+  if (r.dh != null && r.dh >= r.uc - eps) return { s:'U', st:'TOUCH' };
+  if (r.dl != null && r.dl <= r.lc + eps) return { s:'L', st:'TOUCH' };
+  if ((r.uc - r.ltp) / r.uc * 100 <= CFG.NEAR_UC) return { s:'U', st:'NEAR' };
+  if ((r.ltp - r.lc) / r.lc * 100 <= CFG.NEAR_UC) return { s:'L', st:'NEAR' };
+  return null;
+}
+const isT2T = r => r.sr === 'BE' || r.sr === 'BZ';
+
+/* universe gate shared by the card list AND the pulse counts */
+function uniOk(r) {
+  if (!ipoOk(r)) return false;
+  if (bandSel && (bandSel === 'NB' ? r.band != null : r.band !== +bandSel)) return false;
+  if (srSel && (srSel === 'T2T' ? !isT2T(r) : isT2T(r))) return false;
+  if (circSel) {
+    const c = circ(r);
+    if (circSel === 'NONE') { if (c && c.st !== 'NEAR') return false; }
+    else if (!c || `${c.s}-${c.st}` !== circSel) return false;
+  }
+  if ($('fNoSurv').checked && r.sv) return false;
+  if ($('fNoCp').checked && (r.cb20 || 0) >= 3) return false;
+  return true;
 }
 
 /* ---- S3: pick the best qualifying pattern on the selected timeframe ---- */
@@ -435,7 +505,7 @@ function currentList() {
   const th = Math.abs(+$('pTh').value) || 0.3;  // direction comes from the chip; number is always a positive gap
   const out = [];
   for (const r of DATA) {
-    if (!ipoOk(r)) continue;
+    if (!uniOk(r)) continue;
     const ev = evaluate(r);
     if (!ev || !boOk(ev)) continue;
     if (sigFilter && ev.sig !== sigFilter) continue;
@@ -474,6 +544,7 @@ function currentList() {
     if (key === 'rsiD')  return (b.r.rsiD ?? -1) - (a.r.rsiD ?? -1);
     if (key === 'score') return (b.ev.sc ?? -1) - (a.ev.sc ?? -1);
     if (key === 'rt')    return (b.ev.rt ?? -1) - (a.ev.rt ?? -1);
+    if (key === 'chg')   return (b.r.chg ?? -999) - (a.r.chg ?? -999);
     if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
     if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
     return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
@@ -485,6 +556,18 @@ function currentList() {
 const fmtVol = v => v == null ? '—'
   : v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L'
   : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+
+const C_TXT = { LOCK:'locked', TOUCH:'hit & opened', NEAR:'near' };
+function circLabel(r) {
+  let out = '';
+  if (r.chg != null) out += `<span>Chg <b>${r.chg >= 0 ? '+' : ''}${r.chg}%</b></span>`;
+  out += `<span>Band <b>${r.band != null ? r.band + '%' : (r.fno ? 'none' : '—')}</b></span>`;
+  const c = circ(r);
+  if (c) out += `<span class="${c.s === 'U' ? 'cu' : 'cl'}">${c.s}C <b>${c.s === 'U' ? r.uc : r.lc}</b> ${C_TXT[c.st]}</span>`;
+  if (r.cs) out += `<span class="${r.cs > 0 ? 'cu' : 'cl'}">${r.cs > 0 ? 'UC' : 'LC'} streak <b>×${Math.abs(r.cs)}</b></span>`;
+  if (r.sv) out += `<span class="sv">${r.sv}</span>`;
+  return out;
+}
 
 function ageLabel(r) {
   const y = ldYears(r);
@@ -539,7 +622,7 @@ function render() {
   const counts = Object.fromEntries(sigs.map(s => [s, 0]));
   if (kind === 'pat') {
     for (const r of DATA) {
-      if (!ipoOk(r)) continue;
+      if (!uniOk(r)) continue;
       for (const p of patPool(r)) {
         const m = PAT_META[patKey(p)];
         if (m && counts[m.lab] != null) counts[m.lab]++;
@@ -547,7 +630,7 @@ function render() {
     }
   } else {
     for (const r of DATA) {
-      if (!ipoOk(r)) continue;
+      if (!uniOk(r)) continue;
       const ev = evaluate(r);
       if (ev && boOk(ev) && counts[ev.sig] != null) counts[ev.sig]++;
     }
@@ -570,13 +653,13 @@ function render() {
     const on = selected.has(selKey(r));
     return `<div class="card${on ? ' sel' : ''}" data-i="${i}">
       <div class="symcell"><label class="pick" title="Select for Excel"><input type="checkbox"${on ? ' checked' : ''} aria-label="Select ${r.s}"></label>
-      <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}<span class="sec">${r.fno ? 'F&O' : ''}</span></a></div>
+      <a class="sym" href="https://www.tradingview.com/chart/?symbol=NSE:${r.s}" target="_blank" rel="noopener">${r.s}<span class="sec">${r.fno ? 'F&O' : ''}${isT2T(r) ? `<span class="t2t">T2T · ${r.sr}</span>` : ''}</span></a></div>
       <div class="ltp">${r.ltp}</div>
       <div></div>
       <div class="badge ${ev.cls}">${ev.sig} ${pct}${bt}${stTag}</div>
       ${rail(ev, r)}
       <div class="meta">
-        ${wtag}${gzTag}${patTag}${ageTag}
+        ${wtag}${gzTag}${patTag}${circLabel(r)}${ageTag}
         <span>RSI D <b>${r.rsiD ?? '—'}</b></span><span>W <b>${r.rsiW ?? '—'}</b></span>
         <span>M <b>${r.rsiM ?? '—'}</b></span>
         <span>E9 <b>${emaOf(r,'e9') ?? '—'}</b></span><span>E21 <b>${emaOf(r,'e21') ?? '—'}</b></span><span>VWAP <b>${r.vwap ?? '—'}</b></span><span>Vol <b>${fmtVol(r.v7)}</b></span>
@@ -618,6 +701,11 @@ document.querySelectorAll('.ichip').forEach(w => w.onclick = () => {
   document.querySelectorAll('.ichip').forEach(x => x.classList.remove('on'));
   w.classList.add('on'); ipoSel = w.dataset.ipo; render();
 });
+[['cchip', 'c', v => circSel = v], ['bchip', 'b', v => bandSel = v], ['srchip', 'sr', v => srSel = v]]
+  .forEach(([cls, key, set]) => document.querySelectorAll('.' + cls).forEach(w => w.onclick = () => {
+    document.querySelectorAll('.' + cls).forEach(x => x.classList.remove('on'));
+    w.classList.add('on'); set(w.dataset[key]); render();
+  }));
 document.querySelectorAll('.gchip').forEach(w => w.onclick = () => {
   document.querySelectorAll('.gchip').forEach(x => x.classList.remove('on'));
   w.classList.add('on'); patStage = w.dataset.st; render();
@@ -644,18 +732,21 @@ $('ftoggle').onclick = () => { $('fpanel').classList.toggle('open'); $('ftoggle'
 const TXT = ['search','tFrom','tTo','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol','boMin','boMax','patScore'];
 TXT.forEach(id => $(id).oninput = render);
 ['fCandle','sort'].forEach(id => $(id).onchange = render);
-['fFno'].forEach(id => $(id).onchange = render);
+['fFno','fNoSurv','fNoCp'].forEach(id => $(id).onchange = render);
 $('freset').onclick = () => {
   TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3'; $('boMax').value = '5';
   $('patScore').value = '60';
   $('rtMin').value = ''; $('rtMax').value = ''; syncRt();
   $('fCandle').value = '';
-  ['fFno'].forEach(id => $(id).checked = false);
-  sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = '';
+  ['fFno','fNoSurv','fNoCp'].forEach(id => $(id).checked = false);
+  sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = ''; circSel = ''; bandSel = ''; srSel = '';
   drawProx();
   document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
   document.querySelectorAll('.ichip').forEach(w => w.classList.toggle('on', w.dataset.ipo === ''));
   document.querySelectorAll('.gchip').forEach(w => w.classList.toggle('on', w.dataset.st === ''));
+  document.querySelectorAll('.cchip').forEach(w => w.classList.toggle('on', w.dataset.c === ''));
+  document.querySelectorAll('.bchip').forEach(w => w.classList.toggle('on', w.dataset.b === ''));
+  document.querySelectorAll('.srchip').forEach(w => w.classList.toggle('on', w.dataset.sr === ''));
   render();
 };
 $('copyBtn').onclick = () => {
@@ -746,6 +837,12 @@ function filterSummary() {
   if ($('fFno').checked) parts.push('F&O only');
   const ipo = document.querySelector('.ichip.on');
   if (ipoSel && ipo) parts.push(ipo.textContent.trim());
+  const chipTxt = (cls, on) => on ? document.querySelector('.' + cls + '.on')?.textContent.trim() : '';
+  if (circSel)  parts.push('Circuit: ' + chipTxt('cchip', circSel));
+  if (bandSel)  parts.push('Band: ' + chipTxt('bchip', bandSel));
+  if (srSel)    parts.push('Series: ' + chipTxt('srchip', srSel));
+  if ($('fNoSurv').checked) parts.push('ASM/GSM hidden');
+  if ($('fNoCp').checked)   parts.push('Circuit-prone skipped');
   if (v('search')) parts.push('Search: ' + v('search'));
   return parts.join(' | ') || 'None';
 }

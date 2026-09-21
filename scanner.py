@@ -1,5 +1,5 @@
 """
-SWING / POSITIONAL SCANNER — all NSE EQ stocks (~2000)
+SWING / POSITIONAL SCANNER — all NSE EQ + trade-to-trade (BE/BZ) stocks
 Timeframes: Monthly, Weekly (+ Daily context)
 
 Ships raw features to data.json. Strategy logic (doji breakout,
@@ -18,6 +18,7 @@ are resampled locally — ~6x fewer network calls than per-ticker history.
 """
 
 import json
+import math
 import time
 import logging
 import warnings
@@ -53,8 +54,13 @@ resp = requests.get(
 resp.raise_for_status()
 eq = pd.read_csv(pd.io.common.StringIO(resp.text))
 eq.columns = eq.columns.str.strip()
-eq = eq[eq["SERIES"] == "EQ"]
+eq["SERIES"] = eq["SERIES"].astype(str).str.strip()
+# EQ = normal rolling settlement; BE / BZ = trade-to-trade (no intraday, delivery only).
+# T2T names are where most circuit action happens, so they are included and tagged.
+UNIVERSE_SERIES = ("EQ", "BE", "BZ")
+eq = eq[eq["SERIES"].isin(UNIVERSE_SERIES)]
 base_symbols = eq["SYMBOL"].astype(str).str.strip().tolist()
+series_map = dict(zip(base_symbols, eq["SERIES"]))
 
 # ---- listing dates (drives the rolling "last N years IPO" filter) ----
 listing = {}
@@ -94,6 +100,37 @@ for _url in ("https://nsearchives.nseindia.com/content/fo/fo_mktlots.csv",
 if not fno_set:
     print("WARNING: F&O list fetch failed from all sources — fno flags will be 0")
 
+# ---- price bands + surveillance remarks (NSE sec_list.csv) ----
+# Band is 2 / 5 / 10 / 20, or "No Band" (F&O names — dynamic flexing, never hard-locked).
+band_map, surv_map = {}, {}
+for _url in ("https://nsearchives.nseindia.com/content/equities/sec_list.csv",
+             "https://archives.nseindia.com/content/equities/sec_list.csv"):
+    try:
+        _r = requests.get(_url, headers=HEADERS, timeout=30)
+        if not (_r.ok and "Symbol" in _r.text[:300] and "Band" in _r.text[:300]):
+            continue
+        _sl = pd.read_csv(pd.io.common.StringIO(_r.text))
+        _sl.columns = _sl.columns.str.strip()
+        _sl["Symbol"] = _sl["Symbol"].astype(str).str.strip()
+        _sl["Series"] = _sl["Series"].astype(str).str.strip()
+        _want = _sl["Symbol"].map(series_map)
+        _sl = _sl.assign(_miss=_sl["Series"].ne(_want)).sort_values("_miss", kind="stable")  # matching series wins
+        for _, _rr in _sl.drop_duplicates("Symbol").iterrows():
+            try:
+                band_map[_rr["Symbol"]] = float(str(_rr.get("Band", "")).strip())
+            except ValueError:
+                band_map[_rr["Symbol"]] = None
+            _rm = str(_rr.get("Remarks", "")).strip().strip('"')
+            if _rm and _rm not in ("-", "nan"):
+                surv_map[_rr["Symbol"]] = _rm
+        if band_map:
+            break
+    except Exception:
+        continue
+if not band_map:
+    print("WARNING: price-band list fetch failed — circuit fields will be empty")
+print(f"Price bands: {sum(1 for v in band_map.values() if v)} banded | surveillance remarks: {len(surv_map)}")
+
 symbols = [s + ".NS" for s in base_symbols]
 print(f"Universe: {len(symbols)} symbols | F&O flags: {len(fno_set)}")
 
@@ -111,6 +148,32 @@ def r2(v):
     if pd.isna(f) or np.isinf(f):
         return None
     return round(f, 2)
+
+
+def tick_for(price):
+    """NSE CM tick size by price slab (revised 15-Apr-2025)."""
+    if price is None or price < 250:
+        return 0.01
+    if price <= 1000:
+        return 0.05
+    if price <= 5000:
+        return 0.10
+    if price <= 10000:
+        return 0.50
+    if price <= 20000:
+        return 1.0
+    return 5.0
+
+
+def band_limits(pc, band, tk):
+    """Upper / lower circuit price: band applied to prev close, rounded INSIDE the band
+    to a valid tick. This rounding is why a 5% stock locks at 4.9x%."""
+    uc = math.floor(round(pc * (1 + band / 100) / tk, 6)) * tk
+    lc = math.ceil(round(pc * (1 - band / 100) / tk, 6)) * tk
+    # sub-rupee stocks: band can round to zero ticks — assume at least one tick of room
+    uc = max(uc, pc + tk)
+    lc = max(tk, min(lc, pc - tk))
+    return round(uc, 2), round(lc, 2)
 
 
 def candle_pattern(o, h, l, c):
@@ -264,6 +327,7 @@ def process_symbol(base, df):
         "ltp": r2(ltp),
         "fno": 1 if base in fno_set else 0,
         "ld": listing.get(base),
+        "sr": series_map.get(base, "EQ"),
         "mMax": m_max, "mMin": m_min, "mW": m_w,
         "wMax": w_max, "wMin": w_min, "wW": w_w,
         "dMax": d_max, "dMin": d_min, "dW": d_w,
@@ -288,6 +352,46 @@ def process_symbol(base, df):
     vol = df["Volume"].dropna()
     comp_vol = vol.iloc[:-1] if daily_is_live else vol
     row["v7"] = r2(comp_vol.tail(7).mean()) if len(comp_vol) else None
+
+    # ---- price band / circuit ----
+    # base price = close of the session BEFORE the latest one (live or finished)
+    cl = df["Close"].to_numpy(dtype=float)
+    hi = df["High"].to_numpy(dtype=float)
+    lo = df["Low"].to_numpy(dtype=float)
+    if len(cl) >= 2 and cl[-2] > 0:
+        pc = float(cl[-2])
+        row["pc"] = r2(pc)
+        row["chg"] = r2((ltp - pc) / pc * 100)
+        row["dh"] = r2(hi[-1])
+        row["dl"] = r2(lo[-1])
+        band = None if base in fno_set else band_map.get(base)
+        if band:
+            # tick is fixed monthly from the previous month-end close
+            ref = float(pm_bar["Close"]) if pm_bar is not None else pc
+            tk = tick_for(ref)
+            uc, lc = band_limits(pc, band, tk)
+            row.update({"band": band, "tk": tk, "uc": uc, "lc": lc})
+
+            # approx history with TODAY's band: circuit closes in last 20 sessions + current streak
+            cb, streak = 0, 0
+            start = max(1, len(cl) - 20)
+            flags = []
+            for i in range(start, len(cl)):
+                t_i = tick_for(cl[i - 1])
+                u_i, l_i = band_limits(cl[i - 1], band, t_i)
+                f = 1 if cl[i] >= u_i - t_i else (-1 if cl[i] <= l_i + t_i else 0)
+                flags.append(f)
+                cb += 1 if f else 0
+            for f in reversed(flags):
+                if f == 0 or (streak and (f > 0) != (streak > 0)):
+                    break
+                streak += f
+            if cb:
+                row["cb20"] = cb
+            if streak:
+                row["cs"] = streak
+    if base in surv_map:
+        row["sv"] = surv_map[base]
 
     # ---- chart-pattern intel on completed bars of each timeframe ----
     d_comp = df.iloc[:-1] if daily_is_live else df
