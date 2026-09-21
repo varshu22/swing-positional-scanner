@@ -408,6 +408,9 @@ function ipoOk(r) {
 function circ(r) {
   if (r.band == null || r.uc == null || r.ltp == null) return null;
   const eps = (r.tk || 0.05) + 1e-9;                 // one-tick tolerance for rounding convention
+  // traded beyond the computed band -> today's band was different (NSE file already carries a revised band)
+  if (r.ltp > r.uc + eps || r.ltp < r.lc - eps || (r.dh != null && r.dh > r.uc + eps) || (r.dl != null && r.dl < r.lc - eps))
+    return { s:'?', st:'REV' };
   if (r.ltp >= r.uc - eps) return { s:'U', st:'LOCK' };
   if (r.ltp <= r.lc + eps) return { s:'L', st:'LOCK' };
   if (r.dh != null && r.dh >= r.uc - eps) return { s:'U', st:'TOUCH' };
@@ -425,7 +428,7 @@ function uniOk(r) {
   if (srSel && (srSel === 'T2T' ? !isT2T(r) : isT2T(r))) return false;
   if (circSel) {
     const c = circ(r);
-    if (circSel === 'NONE') { if (c && c.st !== 'NEAR') return false; }
+    if (circSel === 'NONE') { if (c && c.st !== 'NEAR' && c.st !== 'REV') return false; }
     else if (!c || `${c.s}-${c.st}` !== circSel) return false;
   }
   if ($('fNoSurv').checked && r.sv) return false;
@@ -553,17 +556,36 @@ function currentList() {
 }
 
 /* ================= RENDER ================= */
+/* when nothing matches, say WHICH filter is emptying the list */
+function emptyHint() {
+  const base = 'No stocks match. Loosen a filter or pick another signal chip.';
+  if (!(circSel || bandSel || srSel)) return `<div class="empty">${base}</div>`;
+  if (!DATA.some(r => r.band != null || r.sr))
+    return `<div class="empty">${base}<br><br>data.json has no price-band data yet — the updated scanner has not run. Trigger the workflow once, then hard-refresh.</div>`;
+  const k = STRATS[strat].kind, n = DATA.filter(uniOk).length, why = [];
+  if ($('fFno').checked && ((circSel && circSel !== 'NONE') || (bandSel && bandSel !== 'NB')))
+    why.push('"F&O only" is ticked — F&O stocks have no fixed band, so they are never in circuit');
+  if (sigFilter) why.push(`the signal chip "${sigFilter}" is selected`);
+  if (k === 'doji') why.push('S1 only lists stocks whose previous candle was a Doji');
+  if (k === 'pat')  why.push('S3 only lists stocks with a detected pattern that passes quality / stage / retrace');
+  if (k === 'rect' && $('boMax').value !== '') why.push(`"Rect BO distance" max ${$('boMax').value}% drops bigger breakouts`);
+  let msg = `${n} stock${n === 1 ? '' : 's'} match the circuit / band / series filters by themselves`;
+  msg += why.length ? `, but here they are removed because ${why.join('; ')}.` : ', but another filter (RSI, volume, crossover, candle, search) removes them.';
+  if (k !== 'rect') msg += ' For a pure circuit scan use S2 · Rect Breakout — it lists every stock.';
+  return `<div class="empty">${base}<br><br>${msg}</div>`;
+}
 const fmtVol = v => v == null ? '—'
   : v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L'
   : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
 
-const C_TXT = { LOCK:'locked', TOUCH:'hit & opened', NEAR:'near' };
+const C_TXT = { LOCK:'locked', TOUCH:'hit & opened', NEAR:'near', REV:'band revised' };
 function circLabel(r) {
   let out = '';
   if (r.chg != null) out += `<span>Chg <b>${r.chg >= 0 ? '+' : ''}${r.chg}%</b></span>`;
   out += `<span>Band <b>${r.band != null ? r.band + '%' : (r.fno ? 'none' : '—')}</b></span>`;
   const c = circ(r);
-  if (c) out += `<span class="${c.s === 'U' ? 'cu' : 'cl'}">${c.s}C <b>${c.s === 'U' ? r.uc : r.lc}</b> ${C_TXT[c.st]}</span>`;
+  if (c && c.st === 'REV') out += `<span class="sv">band revised today</span>`;
+  else if (c) out += `<span class="${c.s === 'U' ? 'cu' : 'cl'}">${c.s}C <b>${c.s === 'U' ? r.uc : r.lc}</b> ${C_TXT[c.st]}</span>`;
   if (r.cs) out += `<span class="${r.cs > 0 ? 'cu' : 'cl'}">${r.cs > 0 ? 'UC' : 'LC'} streak <b>×${Math.abs(r.cs)}</b></span>`;
   if (r.sv) out += `<span class="sv">${r.sv}</span>`;
   return out;
@@ -641,7 +663,7 @@ function render() {
   document.querySelectorAll('.pchip').forEach(c => c.onclick = () => { sigFilter = c.dataset.sig; render(); });
 
   const rowsEl = $('rows');
-  if (!list.length) { rowsEl.innerHTML = '<div class="empty">No stocks match. Loosen a filter or pick another signal chip.</div>'; return; }
+  if (!list.length) { rowsEl.innerHTML = emptyHint(); return; }
   rowsEl.innerHTML = VIEW.map(({ r, ev }, i) => {
     const pct = ev.pct == null ? '' : `<span class="pct">${ev.pct >= 0 ? '+' : ''}${ev.pct.toFixed(2)}%</span>`;
     const bt = ev.t ? `<span class="bt">· ${ev.t}</span>` : '';
