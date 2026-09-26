@@ -6,7 +6,7 @@
 <title>Tapewatch — Swing / Positional</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Newsreader:opsz,wght@6..72,600&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0B0F15; --panel:#111826; --panel2:#161F2D; --line:#1E2B3C;
@@ -17,18 +17,83 @@
   --blue:#6AA5E8; --blue-dim:rgba(106,165,232,.13);
   --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
   --disp:'Sora',system-ui,sans-serif;
+  --wordmark:'Fraunces',serif; --wordmark-style:italic;
+  --headbg:rgba(11,15,21,.93); --cs:dark;
 }
+
+/* ---------- Daylight Ledger: light, serif headline, for daytime scanning ---------- */
+html[data-theme="ledger"]{
+  --bg:#EDEDE6; --panel:#F8F8F4; --panel2:#E3E3DA; --line:#CECEC2;
+  --text:#1C1E1A; --muted:#565950; --acc:#245C3F; --acc-dim:rgba(36,92,63,.12);
+  --gold:#7A5809; --gold-dim:rgba(122,88,9,.15);
+  --up:#1D5335; --up-dim:rgba(29,83,53,.12);
+  --dn:#8A2C1B; --dn-dim:rgba(138,44,27,.12);
+  --blue:#1F4E79; --blue-dim:rgba(31,78,121,.12);
+  --mono:'DM Mono','IBM Plex Mono',ui-monospace,monospace;
+  --disp:'Atkinson Hyperlegible',Verdana,sans-serif;
+  --wordmark:'Newsreader',Georgia,serif; --wordmark-style:normal;
+  --headbg:rgba(237,237,230,.94); --cs:light;
+}
+
+/* ---------- Retro desktop: raised = clickable, sunken = filled in by the app ---------- */
+html[data-theme="retro-light"]{
+  --bg:#8E9384; --panel:#EFEDE2; --panel2:#D6D2C4; --line:#8B887B;
+  --text:#1E201A; --muted:#54574C; --acc:#245C3F; --acc-dim:#C9D6CC;
+  --gold:#7A5809; --gold-dim:#E3D8B8;
+  --up:#1D5335; --up-dim:#C9D9CC;
+  --dn:#8A2C1B; --dn-dim:#E6CEC7;
+  --blue:#1F4E79; --blue-dim:#C8D5E0;
+  --face:#D6D2C4;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --disp:'IBM Plex Sans',Verdana,sans-serif;
+  --wordmark:'Silkscreen',monospace; --wordmark-style:normal;
+  --headbg:#D6D2C4; --cs:light;
+}
+html[data-theme="retro-dark"]{
+  --bg:#15140F; --panel:#26251E; --panel2:#3A382F; --line:#17160F;
+  --text:#EDE6D2; --muted:#A69E88; --acc:#D9A33C; --acc-dim:#463A22;
+  --gold:#D9A33C; --gold-dim:#463A22;
+  --up:#9BC47A; --up-dim:#2E3A22;
+  --dn:#E08163; --dn-dim:#3F2920;
+  --blue:#8FB0D9; --blue-dim:#25313D;
+  --face:#3A382F;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --disp:'IBM Plex Sans',Verdana,sans-serif;
+  --wordmark:'Silkscreen',monospace; --wordmark-style:normal;
+  --headbg:#3A382F; --cs:dark;
+}
+/* square corners + real bevels: outset for controls, inset for anything the app filled in */
+html[data-theme^="retro"] *{border-radius:0 !important}
+html[data-theme^="retro"] header{backdrop-filter:none}
+html[data-theme^="retro"] .schip,html[data-theme^="retro"] .tchip,html[data-theme^="retro"] .pchip,
+html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .copy,html[data-theme^="retro"] .wchip,
+html[data-theme^="retro"] .ichip,html[data-theme^="retro"] .gchip,html[data-theme^="retro"] .cchip,
+html[data-theme^="retro"] .bchip,html[data-theme^="retro"] .srchip,html[data-theme^="retro"] .xchip,
+html[data-theme^="retro"] .badge{border:2px outset var(--face);background:var(--face);color:var(--text)}
+html[data-theme^="retro"] .schip.on,html[data-theme^="retro"] .tchip.on,html[data-theme^="retro"] .pchip.on,
+html[data-theme^="retro"] .fbtn.active,html[data-theme^="retro"] .wchip.on,html[data-theme^="retro"] .ichip.on,
+html[data-theme^="retro"] .gchip.on,html[data-theme^="retro"] .cchip.on,html[data-theme^="retro"] .bchip.on,
+html[data-theme^="retro"] .srchip.on,html[data-theme^="retro"] .xchip.on{border-style:inset;background:var(--panel2)}
+html[data-theme^="retro"] .card,html[data-theme^="retro"] .fpanel,html[data-theme^="retro"] .search,
+html[data-theme^="retro"] .rail,html[data-theme^="retro"] .fgroup input,html[data-theme^="retro"] .fgroup select,
+html[data-theme^="retro"] .prox input,html[data-theme^="retro"] .widths input,
+html[data-theme^="retro"] .toolbar select{border:2px inset var(--face)}
+html[data-theme^="retro"] .wordmark{font-size:15px;letter-spacing:.06em}
+html[data-theme^="retro"] .fsec{color:var(--text)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);-webkit-font-smoothing:antialiased;padding-bottom:120px}
 a{color:inherit;text-decoration:none}
 button,select,input{font-family:inherit}
-header{position:sticky;top:0;z-index:20;background:rgba(11,15,21,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px}
+header{position:sticky;top:0;z-index:20;background:var(--headbg);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px}
 .hrow{display:flex;align-items:baseline;gap:12px;max-width:1100px;margin:0 auto}
-.wordmark{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:19px;color:var(--acc);letter-spacing:.3px}
+.wordmark{font-family:var(--wordmark);font-style:var(--wordmark-style);font-weight:600;font-size:19px;color:var(--acc);letter-spacing:.3px}
 .htitle{font-weight:700;font-size:15px;letter-spacing:.4px}
 .hsub{font-size:11px;color:var(--muted)}
 .upd{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);font-family:var(--mono)}
 .upd .stale{color:var(--gold)}
+.themepick{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.themepick select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;min-height:34px;color-scheme:var(--cs)}
+@media(max-width:560px){.hrow{flex-wrap:wrap}.themepick{width:100%;justify-content:flex-end}}
 main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .path{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .path .sep{color:var(--line);font-size:15px}
@@ -53,7 +118,7 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .fsec:first-child{margin-top:0}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .fgroup label{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
-.fgroup select,.fgroup input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none;color-scheme:dark}
+.fgroup select,.fgroup input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none;color-scheme:var(--cs)}
 .frange{display:flex;gap:6px}
 .chks{display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
 .chks label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
@@ -148,6 +213,15 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <div class="hsub">All NSE · ~2000 stocks · auto-refreshes every 5 min</div>
     </div>
     <div class="upd" id="upd">loading…</div>
+    <div class="themepick">
+      <label for="theme">Theme</label>
+      <select id="theme">
+        <option value="night">Night (current)</option>
+        <option value="ledger">Daylight ledger</option>
+        <option value="retro-light">Retro desktop · light</option>
+        <option value="retro-dark">Retro desktop · dark</option>
+      </select>
+    </div>
   </div>
 </header>
 
@@ -561,6 +635,17 @@ function currentList() {
   });
   return out;
 }
+
+/* ---- theme: four skins over the same tokens, remembered per browser ---- */
+const THEMES = ['night','ledger','retro-light','retro-dark'];
+function applyTheme(name) {
+  const t = THEMES.includes(name) ? name : 'night';
+  document.documentElement.setAttribute('data-theme', t);
+  $('theme').value = t;
+  try { localStorage.setItem('tw-theme', t); } catch (e) {}
+}
+$('theme').onchange = () => applyTheme($('theme').value);
+try { applyTheme(localStorage.getItem('tw-theme') || 'night'); } catch (e) { applyTheme('night'); }
 
 /* ================= RENDER ================= */
 /* when nothing matches, say WHICH filter is emptying the list */
