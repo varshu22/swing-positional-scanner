@@ -345,6 +345,7 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <option value="score">Sort: pattern quality</option>
       <option value="rt">Sort: retrace %</option>
       <option value="chg">Sort: % change today</option>
+      <option value="listed">Sort: newest listing</option>
       <option value="width">Sort: range width</option>
       <option value="vol">Sort: volume</option>
     </select>
@@ -381,6 +382,8 @@ const CFG = {
     M: { VN: 25, N: 50, M: 100 },
   },
   STALE_HOURS: 30,
+  EMA_AT: 1,          // |distance| ≤ this % counts as sitting ON the 200 EMA
+  IPO_MAX_Y: 2,       // S5 lists anything first listed within this many years
   NEAR_UC: 1,
   REFRESH_MS: 5 * 60 * 1000,
 };
@@ -399,6 +402,8 @@ const STRATS = {
   S3: { label:'S3 · Pattern Intel', kind:'pat', tfs: [
     { k:'d', lab:'Day' }, { k:'w', lab:'Week' }, { k:'m', lab:'Month' },
   ]},
+  S4: { label:'S4 · 200 EMA', kind:'ema200', tfs: [{ k:'d', lab:'Day · today' }] },
+  S5: { label:'S5 · New IPOs',  kind:'ipo',    tfs: [{ k:'d', lab:'Listed recently' }] },
 };
 
 /* pattern codes shipped by patterns.py -> display metadata */
@@ -414,6 +419,8 @@ const patKey = p => p.p === 'FLAG' ? 'FLAG' + p.d : p.p;
 const PAT_SIGNALS = ['V RECOVERY','U RECOVERY','BULL FLAG','BEAR FLAG','ASC TRIANGLE','DESC TRIANGLE'];
 const DOJI_SIGNALS = ['HIGH BO','CLOSE BO','LOW BD','GOLDEN ZONE','DOJI WATCH'];
 const RECT_SIGNALS = ['UPPER BO','NEAR UPPER','LOWER BD','NEAR LOWER','INSIDE'];
+const EMA_SIGNALS  = ['AT 200 EMA','ABOVE 200 EMA','BELOW 200 EMA'];
+const IPO_SIGNALS  = ['LISTED ≤1M','LISTED ≤3M','LISTED ≤6M','LISTED ≤1Y','LISTED ≤2Y'];
 const BT_KEY = { 'HIGH BO':'dh', 'CLOSE BO':'dc', 'LOW BD':'dl', 'UPPER BO':'u', 'LOWER BD':'l' };
 const emaOf = (r, k) => r.ema?.[curTF().k]?.[k] ?? null;   // EMA of the SELECTED timeframe
 const PROX = {
@@ -553,10 +560,40 @@ function evalPat(r) {
   };
 }
 
+/* ---- S4: today's LTP against the daily 200 EMA ---- */
+function evalEma(r) {
+  const e = r.e200;
+  if (!e || r.ltp == null) return null;
+  const d = (r.ltp - e) / e * 100;
+  const at = Math.abs(d) <= CFG.EMA_AT;
+  return {
+    sig: at ? 'AT 200 EMA' : (d > 0 ? 'ABOVE 200 EMA' : 'BELOW 200 EMA'),
+    pct: d, cls: at ? 'b-gz' : (d > 0 ? 'b-up' : 'b-dn'),
+    e200: e, lo: e * 0.9, hi: e * 1.1, key: e,
+  };
+}
+
+/* ---- S5: freshly listed stocks, shown even when indicators are still empty ---- */
+function evalIpo(r) {
+  const y = ldYears(r);
+  if (y == null || y > CFG.IPO_MAX_Y) return null;
+  const m = y * 12;
+  const sig = m <= 1 ? 'LISTED ≤1M' : m <= 3 ? 'LISTED ≤3M' : m <= 6 ? 'LISTED ≤6M'
+            : y <= 1 ? 'LISTED ≤1Y' : 'LISTED ≤2Y';
+  const c = r.chg;
+  return {
+    sig, pct: c ?? null, y,
+    cls: c == null ? 'b-gz' : (c > 0 ? 'b-up' : c < 0 ? 'b-dn' : 'b-gz'),
+    lo: r.dl, hi: r.dh, key: r.pc,
+  };
+}
+
 function evaluate(r) {
   const tf = curTF(), kind = STRATS[strat].kind;
   const ev = kind === 'doji' ? evalDoji(r, tf.get(r))
            : kind === 'rect' ? evalRect(r, tf.get(r), tf.wtf)
+           : kind === 'ema200' ? evalEma(r)
+           : kind === 'ipo' ? evalIpo(r)
            : evalPat(r);
   if (ev) ev.t = btFor(ev.sig, r);
   return ev;
@@ -629,6 +666,7 @@ function currentList() {
     if (key === 'score') return (b.ev.sc ?? -1) - (a.ev.sc ?? -1);
     if (key === 'rt')    return (b.ev.rt ?? -1) - (a.ev.rt ?? -1);
     if (key === 'chg')   return (b.r.chg ?? -999) - (a.r.chg ?? -999);
+    if (key === 'listed') return (b.r.ld || '').localeCompare(a.r.ld || '');
     if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
     if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
     return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
@@ -660,6 +698,8 @@ function emptyHint() {
   if (sigFilter) why.push(`the signal chip "${sigFilter}" is selected`);
   if (k === 'doji') why.push('S1 only lists stocks whose previous candle was a Doji');
   if (k === 'pat')  why.push('S3 only lists stocks with a detected pattern that passes quality / stage / retrace');
+  if (k === 'ema200') why.push('S4 only lists stocks with enough history for a 200-day EMA');
+  if (k === 'ipo')  why.push('S5 only lists stocks first listed within the last 2 years');
   if ($('boMin').value !== '' || $('boMax').value !== '') why.push('the "Signal distance %" range is set');
   if ($('fStreak').value) why.push('a circuit-streak filter is set');
   if ($('ltpMin').value !== '' || $('ltpMax').value !== '') why.push('the LTP range is set');
@@ -708,13 +748,13 @@ function rail(ev, r) {
   const kind = STRATS[strat].kind;
   let lo, hi, gz = '';
   if (kind === 'doji')      { lo = ev.c.l; hi = ev.c.h; }
-  else if (kind === 'pat')  { lo = ev.lo;  hi = ev.hi;  }
+  else if (kind === 'pat' || kind === 'ema200' || kind === 'ipo') { lo = ev.lo; hi = ev.hi; }
   else                      { lo = ev.min; hi = ev.max; }
   if (lo == null || hi == null || hi <= lo) return '';
   const span = hi - lo, pad = span * 0.08;
   const L = lo - pad, R = hi + pad, W = R - L;
   const pos = Math.min(100, Math.max(0, (r.ltp - L) / W * 100));
-  if (kind === 'pat' && ev.key != null) {
+  if ((kind === 'pat' || kind === 'ema200' || kind === 'ipo') && ev.key != null) {
     gz = `<div class="key" style="left:${Math.min(100, Math.max(0, (ev.key - L) / W * 100))}%"></div>`;
   }
   if (kind === 'doji') {
@@ -734,7 +774,8 @@ function render() {
   VIEW = list.slice(0, 400);
   syncSelectUI();
   $('count').textContent = `${list.length} stocks`;
-  const sigs = kind === 'doji' ? DOJI_SIGNALS : kind === 'rect' ? RECT_SIGNALS : PAT_SIGNALS;
+  const sigs = kind === 'doji' ? DOJI_SIGNALS : kind === 'rect' ? RECT_SIGNALS
+             : kind === 'ema200' ? EMA_SIGNALS : kind === 'ipo' ? IPO_SIGNALS : PAT_SIGNALS;
   const counts = Object.fromEntries(sigs.map(s => [s, 0]));
   if (kind === 'pat') {
     for (const r of DATA) {
@@ -765,6 +806,12 @@ function render() {
     const gzTag = kind === 'doji' ? `<span>GZ <b>${ev.c.f50}–${ev.c.f618}</b></span>` : '';
     const stTag = kind === 'pat' ? `<span class="st">${ev.stage}</span>` : '';
     const patTag = kind === 'pat' ? patMeta(ev) : '';
+    const emaTag = kind === 'ema200'
+      ? `<span>200 EMA <b>${ev.e200}</b></span><span>Distance <b>${ev.pct >= 0 ? '+' : ''}${ev.pct.toFixed(2)}%</b></span><span>E50 <b>${r.e50 ?? '—'}</b></span>`
+      : '';
+    const ipoTag = kind === 'ipo'
+      ? `<span>Listed <b>${r.ld ?? '—'}</b></span><span>Age <b>${ev.y < 1 ? Math.round(ev.y * 12) + 'm' : ev.y.toFixed(1) + 'y'}</b></span><span>Prev close <b>${r.pc ?? '—'}</b></span>`
+      : '';
     const ageTag = ageLabel(r);
     const on = selected.has(selKey(r));
     return `<div class="card${on ? ' sel' : ''}" data-i="${i}">
@@ -775,7 +822,7 @@ function render() {
       <div class="badge ${ev.cls}">${ev.sig} ${pct}${bt}${stTag}</div>
       ${rail(ev, r)}
       <div class="meta">
-        ${wtag}${gzTag}${patTag}${circLabel(r)}${ageTag}
+        ${wtag}${gzTag}${patTag}${emaTag}${ipoTag}${circLabel(r)}${ageTag}
         <span>RSI D <b>${r.rsiD ?? '—'}</b></span><span>W <b>${r.rsiW ?? '—'}</b></span>
         <span>M <b>${r.rsiM ?? '—'}</b></span>
         <span>E9 <b>${emaOf(r,'e9') ?? '—'}</b></span><span>E21 <b>${emaOf(r,'e21') ?? '—'}</b></span><span>VWAP <b>${r.vwap ?? '—'}</b></span><span>Vol <b>${fmtVol(r.v7)}</b></span>
@@ -794,7 +841,9 @@ function drawPath() {
       `<span class="tchip ${i===tfIdx?'on':''}" data-i="${i}">${t.lab}</span>`).join('');
   document.querySelectorAll('.schip').forEach(c => c.onclick = () => {
     strat = c.dataset.id; tfIdx = 0; sigFilter = '';
-    if (STRATS[strat].kind === 'pat' && $('sort').value === 'pct') $('sort').value = 'score';
+    const nk = STRATS[strat].kind;
+    if (nk === 'pat' && $('sort').value === 'pct') $('sort').value = 'score';
+    if (nk === 'ipo' && ['pct','score'].includes($('sort').value)) $('sort').value = 'listed';
     drawPath(); render();
   });
   document.querySelectorAll('.tchip').forEach(c => c.onclick = () => {

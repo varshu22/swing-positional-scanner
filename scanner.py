@@ -38,9 +38,11 @@ IST = timezone(timedelta(hours=5, minutes=30))
 CHUNK = 50
 OUT_FILE = "data.json"
 
-MIN_BARS = 60          # normal minimum history
-MIN_BARS_NEW = 25      # relaxed minimum for recently listed IPOs
-NEW_LISTING_YEARS = 3  # keep IPOs this recent even with thin history
+MIN_BARS = 60           # normal minimum history
+MIN_BARS_NEW = 25       # relaxed minimum for recently listed IPOs
+MIN_BARS_FRESH = 2      # just-listed IPOs: ship whatever exists, indicators stay null
+FRESH_DAYS = 200        # "just listed" window that earns MIN_BARS_FRESH
+NEW_LISTING_YEARS = 3   # keep IPOs this recent even with thin history
 
 # ===============================
 # UNIVERSE: all NSE EQ + F&O flag
@@ -286,7 +288,9 @@ def process_symbol(base, df):
     df = df.dropna(subset=["Close"])
     ld_days = listed_days(base)
     is_new = ld_days is not None and ld_days <= NEW_LISTING_YEARS * 365
-    if len(df) < (MIN_BARS_NEW if is_new else MIN_BARS):
+    is_fresh = ld_days is not None and ld_days <= FRESH_DAYS
+    need = MIN_BARS_FRESH if is_fresh else (MIN_BARS_NEW if is_new else MIN_BARS)
+    if len(df) < need:
         return None
 
     now = datetime.now(IST)
