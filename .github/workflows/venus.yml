@@ -1,0 +1,49 @@
+name: Venus scanner
+
+on:
+  workflow_dispatch:          # cron-job.org primary trigger + manual "Run workflow"
+  schedule:
+    # Backup only (GitHub cron often runs late). Times in UTC = IST - 5:30
+    # 09:32, 09:47 ... 15:17 IST
+    - cron: "2,17,32,47 4-9 * * 1-5"
+    # 15:32 IST final run of the day
+    - cron: "2 10 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: venus
+  cancel-in-progress: false   # let a running scan finish; the next one queues
+
+jobs:
+  venus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Venus scanner
+        run: python venus.py
+
+      - name: Commit venus.json
+        run: |
+          git config user.name "venus-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add venus.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "venus: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          # main scanner also pushes to this repo -> rebase and retry
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push failed, retry $i"; sleep $((i * 5))
+          done
+          exit 1

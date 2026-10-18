@@ -34,5 +34,11 @@ jobs:
           git config user.name "scanner-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data.json
-          git diff --cached --quiet || git commit -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          # Venus workflow also pushes to this repo -> rebase and retry
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push failed, retry $i"; sleep $((i * 5))
+          done
+          exit 1
