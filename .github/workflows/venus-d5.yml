@@ -1,0 +1,60 @@
+name: Venus D5 fast
+
+on:
+  workflow_dispatch:          # cron-job.org primary trigger (every 5 min) + manual run
+  schedule:
+    # Backup only — GitHub cron is unreliable at 5-min spacing. UTC = IST - 5:30
+    - cron: "52,57 3 * * 1-5"       # 09:22, 09:27 IST
+    - cron: "2-57/5 4-9 * * 1-5"    # 09:32 ... 15:27 IST
+    - cron: "2 10 * * 1-5"          # 15:32 IST final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: venus-d5
+  cancel-in-progress: false
+
+jobs:
+  d5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Venus D5
+        run: python venus.py --combos D5 --out venus_d5.json
+
+      - name: Commit venus_d5.json
+        run: |
+          git config user.name "venus-bot"
+          git config user.email "actions@users.noreply.github.com"
+          BR="${GITHUB_REF_NAME}"
+          git add venus_d5.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          MSG="venus-d5: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git fetch origin "$BR" --depth=2
+          HEAD_SHA=$(git rev-parse HEAD)
+          # Keep history small: if the last commit on the branch is our own D5 commit,
+          # replace it (amend) instead of stacking a new one every 5 minutes.
+          if [ "$HEAD_SHA" = "$(git rev-parse origin/$BR)" ] && \
+             git log -1 --format=%s | grep -q '^venus-d5:'; then
+            git commit --amend -m "$MSG"
+            if git push --force-with-lease="$BR:$HEAD_SHA" origin "HEAD:$BR"; then exit 0; fi
+            echo "lease failed (someone else pushed) -> normal commit"
+            git reset --soft "$HEAD_SHA"
+          fi
+          git commit -m "$MSG"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$BR" && git push origin "HEAD:$BR" && exit 0
+            echo "push failed, retry $i"; sleep $((i * 3))
+          done
+          exit 1
