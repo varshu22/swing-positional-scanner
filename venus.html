@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Tapewatch — Venus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Newsreader:opsz,wght@6..72,600&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0F15; --panel:#111826; --panel2:#161F2D; --line:#1E2B3C;
+  --text:#EAF1F7; --muted:#7E8CA0; --acc:#D9B36C; --acc-dim:rgba(217,179,108,.13);
+  --gold:#D9B36C; --gold-dim:rgba(217,179,108,.16);
+  --up:#3FBF8F; --up-dim:rgba(63,191,143,.13);
+  --dn:#E4586C; --dn-dim:rgba(228,88,108,.13);
+  --blue:#6AA5E8; --blue-dim:rgba(106,165,232,.13);
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --disp:'Sora',system-ui,sans-serif;
+  --wordmark:'Fraunces',serif; --wordmark-style:italic;
+  --headbg:rgba(11,15,21,.93); --cs:dark;
+}
+
+/* ---------- Daylight Ledger: light, serif headline, for daytime scanning ---------- */
+html[data-theme="ledger"]{
+  --bg:#EDEDE6; --panel:#F8F8F4; --panel2:#E3E3DA; --line:#CECEC2;
+  --text:#1C1E1A; --muted:#565950; --acc:#245C3F; --acc-dim:rgba(36,92,63,.12);
+  --gold:#7A5809; --gold-dim:rgba(122,88,9,.15);
+  --up:#1D5335; --up-dim:rgba(29,83,53,.12);
+  --dn:#8A2C1B; --dn-dim:rgba(138,44,27,.12);
+  --blue:#1F4E79; --blue-dim:rgba(31,78,121,.12);
+  --mono:'DM Mono','IBM Plex Mono',ui-monospace,monospace;
+  --disp:'Atkinson Hyperlegible',Verdana,sans-serif;
+  --wordmark:'Newsreader',Georgia,serif; --wordmark-style:normal;
+  --headbg:rgba(237,237,230,.94); --cs:light;
+}
+
+/* ---------- Retro desktop: raised = clickable, sunken = filled in by the app ---------- */
+html[data-theme="retro-light"]{
+  --bg:#8E9384; --panel:#EFEDE2; --panel2:#D6D2C4; --line:#8B887B;
+  --text:#1E201A; --muted:#54574C; --acc:#245C3F; --acc-dim:#C9D6CC;
+  --gold:#7A5809; --gold-dim:#E3D8B8;
+  --up:#1D5335; --up-dim:#C9D9CC;
+  --dn:#8A2C1B; --dn-dim:#E6CEC7;
+  --blue:#1F4E79; --blue-dim:#C8D5E0;
+  --face:#D6D2C4;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --disp:'IBM Plex Sans',Verdana,sans-serif;
+  --wordmark:'Silkscreen',monospace; --wordmark-style:normal;
+  --headbg:#D6D2C4; --cs:light;
+}
+html[data-theme="retro-dark"]{
+  --bg:#15140F; --panel:#26251E; --panel2:#3A382F; --line:#17160F;
+  --text:#EDE6D2; --muted:#A69E88; --acc:#D9A33C; --acc-dim:#463A22;
+  --gold:#D9A33C; --gold-dim:#463A22;
+  --up:#9BC47A; --up-dim:#2E3A22;
+  --dn:#E08163; --dn-dim:#3F2920;
+  --blue:#8FB0D9; --blue-dim:#25313D;
+  --face:#3A382F;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --disp:'IBM Plex Sans',Verdana,sans-serif;
+  --wordmark:'Silkscreen',monospace; --wordmark-style:normal;
+  --headbg:#3A382F; --cs:dark;
+}
+html[data-theme^="retro"] *{border-radius:0 !important}
+html[data-theme^="retro"] header{backdrop-filter:none}
+html[data-theme^="retro"] .chip,html[data-theme^="retro"] .copy{border:2px outset var(--face);background:var(--face);color:var(--text)}
+html[data-theme^="retro"] .chip.on{border-style:inset;background:var(--panel2)}
+html[data-theme^="retro"] .card,html[data-theme^="retro"] .search{border:2px inset var(--face)}
+html[data-theme^="retro"] .wordmark{font-size:15px;letter-spacing:.06em}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{color-scheme:var(--cs)}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);-webkit-font-smoothing:antialiased;padding-bottom:60px}
+a{color:inherit;text-decoration:none}
+button,select,input{font-family:inherit}
+header{position:sticky;top:0;z-index:20;background:var(--headbg);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px}
+.hrow{display:flex;align-items:baseline;gap:12px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+.wordmark{font-family:var(--wordmark);font-style:var(--wordmark-style);font-weight:600;font-size:19px;color:var(--acc)}
+.htitle{font-weight:700;font-size:15px;letter-spacing:.4px}
+.hsub{font-size:11px;color:var(--muted)}
+.upd{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.back{font-size:12px;color:var(--acc);border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+main{max-width:1100px;margin:0 auto;padding:14px 16px}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;width:100%;margin-top:4px}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--muted);padding:6px 12px;border-radius:999px;font-size:12.5px;cursor:pointer}
+.chip.on{background:var(--acc-dim);border-color:var(--acc);color:var(--text);font-weight:600}
+.chip .n{font-family:var(--mono);font-size:11px;opacity:.75;margin-left:4px}
+.search{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:10px;font-size:13px}
+.copy{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:7px 12px;border-radius:10px;font-size:12px;cursor:pointer}
+.meta{font-size:12px;color:var(--muted);margin:6px 0 10px;font-family:var(--mono)}
+.rows{display:grid;gap:10px}
+@media(min-width:760px){.rows{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sym{font-weight:700;font-size:15px}
+.sym a:hover{text-decoration:underline}
+.ltp{margin-left:auto;font-family:var(--mono);font-size:14px}
+.tag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.04em}
+.U{background:var(--up-dim);color:var(--up)} .D{background:var(--dn-dim);color:var(--dn)}
+.BO{background:var(--gold-dim);color:var(--gold)} .FAIL{background:var(--blue-dim);color:var(--blue)}
+.IN,.FORM{background:var(--panel2);color:var(--muted)}
+.box{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.cell{background:var(--panel2);border-radius:8px;padding:6px 8px}
+.cell .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.cell .v{font-family:var(--mono);font-size:12px}
+.foot{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.foot b{color:var(--text);font-weight:600}
+.empty,.loading{color:var(--muted);text-align:center;padding:40px 10px;grid-column:1/-1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:8px 14px;border-radius:10px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <span class="wordmark">Tapewatch</span>
+    <div>
+      <div class="htitle">Venus · 3-candle box</div>
+      <div class="hsub">Nifty 500 · M/30m · W/15m · D/5m · scans every 15 min in market hours</div>
+    </div>
+    <a class="back" href="./">← Swing / Positional</a>
+    <div class="upd" id="upd">loading…</div>
+  </div>
+</header>
+<main>
+  <div class="bar" id="combo">
+    <span class="lbl">Combination</span>
+    <button class="chip on" data-c="M30">Month · 30m<span class="n"></span></button>
+    <button class="chip" data-c="W15">Week · 15m<span class="n"></span></button>
+    <button class="chip" data-c="D5">Day · 5m<span class="n"></span></button>
+  </div>
+  <div class="bar" id="side">
+    <span class="lbl">Direction</span>
+    <button class="chip on" data-v="">Both</button>
+    <button class="chip" data-v="U">Bull ↑ (prev high)</button>
+    <button class="chip" data-v="D">Bear ↓ (prev low)</button>
+  </div>
+  <div class="bar" id="status">
+    <span class="lbl">Status (tap to toggle)</span>
+    <button class="chip on" data-v="BO">Breakout<span class="n"></span></button>
+    <button class="chip on" data-v="FAIL">Pattern Fail<span class="n"></span></button>
+    <button class="chip" data-v="IN">Inside box<span class="n"></span></button>
+    <button class="chip" data-v="FORM">Forming (C1/C2)<span class="n"></span></button>
+  </div>
+  <div class="bar">
+    <input class="search" id="search" placeholder="Search symbol…" autocomplete="off">
+    <button class="copy" id="copy">Copy symbols</button>
+  </div>
+  <div class="meta" id="meta"></div>
+  <div class="rows" id="rows"><div class="loading">Loading venus.json…</div></div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+try { document.documentElement.setAttribute('data-theme', localStorage.getItem('tw-theme') || 'night'); } catch (e) {}
+
+const ST_LABEL = {BO:'Breakout', FAIL:'Pattern Fail', IN:'Inside box', FORM:'Forming'};
+const ST_ORDER = {BO:0, FAIL:1, IN:2, FORM:3};
+const state = {combo:'M30', side:'', status:new Set(['BO','FAIL']), q:''};
+let DATA = null, shown = [];
+
+function chips(groupId, onPick, multi){
+  $(groupId).querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    if (!multi) $(groupId).querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
+    b.classList.toggle('on', multi ? !b.classList.contains('on') : true);
+    onPick(b); render();
+  }));
+}
+chips('combo', b => state.combo = b.dataset.c);
+chips('side',  b => state.side = b.dataset.v);
+chips('status', b => b.classList.contains('on') ? state.status.add(b.dataset.v) : state.status.delete(b.dataset.v), true);
+$('search').addEventListener('input', e => { state.q = e.target.value.trim().toUpperCase(); render(); });
+
+const f = v => v == null ? '–' : Number(v).toLocaleString('en-IN', {maximumFractionDigits:2});
+const cdl = c => c ? `${c.t}<br>${f(c.h)} / ${f(c.l)}` : '<span style="opacity:.5">waiting…</span>';
+
+function card(p){
+  const tv = `https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(p.s)}`;
+  const box = p.top != null ? `${f(p.bot)} – ${f(p.top)}` : '–';
+  return `<div class="card">
+    <div class="top">
+      <span class="sym"><a href="${tv}" target="_blank" rel="noopener">${p.s}</a></span>
+      <span class="tag ${p.side}">${p.side === 'U' ? 'BULL ↑' : 'BEAR ↓'}</span>
+      <span class="tag ${p.st}">${ST_LABEL[p.st]}</span>
+      <span class="ltp">${f(p.ltp)}</span>
+    </div>
+    <div class="box">
+      <div class="cell"><div class="k">C1</div><div class="v">${cdl(p.c1)}</div></div>
+      <div class="cell"><div class="k">C2</div><div class="v">${cdl(p.c2)}</div></div>
+      <div class="cell"><div class="k">C3</div><div class="v">${cdl(p.c3)}</div></div>
+    </div>
+    <div class="foot">
+      <span>Prev ${p.side === 'U' ? 'high' : 'low'} <b>${f(p.lvl)}</b></span>
+      <span>Box <b>${box}</b></span>
+      ${p.bt ? `<span>1st breakout <b>${p.bt}</b></span>` : ''}
+      ${p.ft ? `<span>1st fail <b>${p.ft}</b></span>` : ''}
+      ${p.since && (p.st === 'BO' || p.st === 'FAIL') ? `<span>Outside since <b>${p.since}</b></span>` : ''}
+      <span>Last bar <b>${p.bar || '–'}</b></span>
+    </div>
+  </div>`;
+}
+
+function render(){
+  if (!DATA) return;
+  const all = DATA.combos || {};
+  document.querySelectorAll('#combo .chip').forEach(b => {
+    const n = (all[b.dataset.c] || []).filter(p => p.st === 'BO' || p.st === 'FAIL').length;
+    b.querySelector('.n').textContent = n;
+  });
+  const base = (all[state.combo] || []).filter(p => (!state.side || p.side === state.side) && (!state.q || p.s.includes(state.q)));
+  document.querySelectorAll('#status .chip').forEach(b => {
+    b.querySelector('.n').textContent = base.filter(p => p.st === b.dataset.v).length;
+  });
+  shown = base.filter(p => state.status.has(p.st))
+              .sort((a, b) => ST_ORDER[a.st] - ST_ORDER[b.st] || a.s.localeCompare(b.s));
+  $('meta').textContent = `${shown.length} shown · ${DATA.scanned || 0} stocks scanned · ${DATA.universe || ''}`;
+  $('rows').innerHTML = shown.length ? shown.map(card).join('') :
+    '<div class="empty">No stocks match this combination and filter right now.</div>';
+}
+
+$('copy').addEventListener('click', async () => {
+  const txt = [...new Set(shown.map(p => 'NSE:' + p.s))].join(',');
+  try { await navigator.clipboard.writeText(txt); toast(`Copied ${shown.length ? new Set(shown.map(p=>p.s)).size : 0} symbols`); }
+  catch (e) { toast('Copy blocked by browser'); }
+});
+function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
+
+function load(){
+  fetch('venus.json?t=' + Date.now())
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => { DATA = d; $('upd').textContent = 'Updated ' + d.updated; render(); })
+    .catch(e => { $('rows').innerHTML = `<div class="empty">Could not load venus.json (${e.message}).<br>Run the "Venus scanner" workflow once from the Actions tab, then refresh.</div>`; });
+}
+load();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>
