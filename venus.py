@@ -66,9 +66,11 @@ def load_universe():
             df = pd.read_csv(pd.io.common.StringIO(r.text))
             df.columns = df.columns.str.strip()
             syms = df["Symbol"].astype(str).str.strip().tolist()
+            ind_col = next((c for c in df.columns if c.lower() == "industry"), None)
+            sectors = dict(zip(syms, df[ind_col].astype(str).str.strip())) if ind_col else {}
             if len(syms) > 400:
-                print(f"Universe: {len(syms)} symbols from {u}")
-                return syms
+                print(f"Universe: {len(syms)} symbols from {u} | sectors: {len(set(sectors.values()))}")
+                return syms, sectors
         except Exception as e:
             print(f"Universe source failed ({u}): {e}")
     raise SystemExit("Could not load Nifty 500 list")
@@ -247,7 +249,11 @@ def process(base, daily, df5, now_ist, combos=COMBOS):
     cur_day = df5.index[-1].date()           # last trading day in data (weekend/holiday safe)
     today = df5[df5.index.date == cur_day]
     done5 = today[today.index + pd.Timedelta(minutes=5) <= now_ist]
-    quote = {"ltp": r2(today["Close"].iloc[-1]), "dh": r2(today["High"].max()), "dl": r2(today["Low"].min()),
+    prev_d = daily[daily.index.date < cur_day]
+    pc = float(prev_d["Close"].iloc[-1]) if not prev_d.empty else None
+    ltp = float(today["Close"].iloc[-1])
+    quote = {"ltp": r2(ltp), "dh": r2(today["High"].max()), "dl": r2(today["Low"].min()),
+             "pc": r2(pc), "chg": r2((ltp / pc - 1) * 100) if pc else None,
              "asof": bar_end_ms(done5.index[-1], 5) if not done5.empty else None}
     res = {}
     for key, (period, mins) in combos.items():
@@ -295,7 +301,7 @@ def main():
     run = {k: COMBOS[k] for k in args.combos.split(",") if k in COMBOS}
     fast = set(run) == {"D5"}           # day-only mode: tiny downloads, runs every 5 min
 
-    symbols = load_universe()
+    symbols, sectors = load_universe()
     now_ist = datetime.now(IST)
     today = now_ist.date()
     if fast:
@@ -342,6 +348,7 @@ def main():
         "updated": datetime.now(IST).strftime("%Y-%m-%d %H:%M IST"),
         "updatedUtc": datetime.now(timezone.utc).isoformat(),
         "universe": "Nifty 500",
+        "sector": sectors,        # symbol -> NSE industry (Nifty 500 list)
         "scanned": ok,
         "asof": max([q["asof"] for q in quotes.values() if q.get("asof")], default=None),
         "quotes": quotes,         # today's ltp / day high / day low per symbol (for circuit filters)

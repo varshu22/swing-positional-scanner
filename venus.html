@@ -120,6 +120,25 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .freset{margin-top:12px;background:none;border:1px solid var(--dn);color:var(--dn);padding:6px 12px;border-radius:10px;font-size:12px;cursor:pointer}
 .FNO{background:var(--blue-dim);color:var(--blue)} .CIRC{background:var(--dn-dim);color:var(--dn)} .FRESH{background:var(--up-dim);color:var(--up)}
 html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .fpanel{border:2px outset var(--face)}
+.heat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+.heat .hh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.heat .ht{font-weight:700;font-size:13px}
+.heat .hm{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.heat .hx{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:2px 8px;font-size:11px;cursor:pointer}
+.heat.closed #heatGrid,.heat.closed .hm{display:none}
+#heatGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px;margin-top:8px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:7px 8px;text-align:left;color:var(--text);cursor:pointer;display:flex;flex-direction:column;gap:2px;min-height:62px}
+.tile.sel{outline:2px solid var(--acc);outline-offset:1px}
+.tile .tn{font-size:11.5px;font-weight:600;line-height:1.2}
+.tile .tv{font-family:var(--mono);font-size:13px;font-weight:600}
+.tile .tb{font-family:var(--mono);font-size:10px;opacity:.8}
+.sel2{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:10px;font-size:12.5px;max-width:220px}
+.sec{font-size:11px;color:var(--muted);margin-top:3px}
+.pos{color:var(--up)} .neg{color:var(--dn)}
+.ltp .pos,.ltp .neg{font-size:11.5px}
+.info{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;padding:6px 8px;border-radius:8px;background:var(--panel2);font-size:11.5px;font-family:var(--mono);color:var(--muted)}
+.info b{color:var(--text);font-weight:600}
+.info .ik{color:var(--acc);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10.5px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:8px 14px;border-radius:10px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
 </style>
@@ -137,6 +156,10 @@ html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .fpanel{border:2px out
   </div>
 </header>
 <main>
+  <div class="heat" id="heat">
+    <div class="hh"><span class="ht">Sector heatmap · today</span><span class="hm" id="heatMeta"></span><button class="hx" id="hmToggle">Hide</button></div>
+    <div id="heatGrid"><div class="empty" style="padding:14px">Loading…</div></div>
+  </div>
   <div class="bar" id="combo">
     <span class="lbl">Combination</span>
     <button class="chip on" data-c="M30">Month · 30m<span class="n"></span></button>
@@ -167,6 +190,18 @@ html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .fpanel{border:2px out
   </div>
   <div class="bar">
     <input class="search" id="search" placeholder="Search symbol…" autocomplete="off">
+    <select class="sel2" id="fSector"><option value="">All sectors</option></select>
+    <select class="sel2" id="sort">
+      <option value="def">Sort: Status · freshest</option>
+      <option value="fresh">Freshest breakout first</option>
+      <option value="ltpD">LTP: high → low</option>
+      <option value="ltpA">LTP: low → high</option>
+      <option value="chgD">Day % change: top gainers</option>
+      <option value="chgA">Day % change: top losers</option>
+      <option value="boxD">Distance beyond box %</option>
+      <option value="sector">Sector A → Z</option>
+      <option value="sym">Symbol A → Z</option>
+    </select>
     <button class="fbtn" id="ftoggle">Filters</button>
     <button class="copy" id="copy">Copy symbols</button>
   </div>
@@ -222,14 +257,18 @@ try { document.documentElement.setAttribute('data-theme', localStorage.getItem('
 const ST_LABEL = {BO:'Breakout', FAIL:'Pattern Fail', IN:'Inside box', FORM:'Forming'};
 const ST_ORDER = {BO:0, FAIL:1, IN:2, FORM:3};
 const COMBO_TF = {M30:'m', W15:'w', D5:'d'};          // EMA timeframe used in "Auto"
+const TF_NAME = {d:'Daily', w:'Weekly', m:'Monthly'};
 const NEAR_UC = 1;
-const state = {combo:'M30', side:'', status:new Set(['BO','FAIL']), fresh:'', e200:'', circ:'', prox:{}};
+const state = {combo:'M30', side:'', status:new Set(['BO','FAIL']), fresh:'', e200:'', circ:'', prox:{}, sector:''};
 let DATA = null, D5 = null, MAIN = {}, shown = [];
+
 /* Day-5m comes from the 5-min fast run (venus_d5.json) when it is newer than the 15-min run */
 const useD5 = key => key === 'D5' && D5 && (D5.asof || 0) >= (DATA?.asof || 0);
 const srcFor = key => useD5(key) ? D5 : DATA;
 const asofFor = key => srcFor(key)?.asof;
 const quoteFor = (key, s) => srcFor(key)?.quotes?.[s] ?? DATA?.quotes?.[s];
+const liveQuotes = () => (useD5('D5') ? D5.quotes : DATA?.quotes) || {};      // freshest quotes for the heatmap
+const sectorOf = s => DATA?.sector?.[s] || D5?.sector?.[s] || MAIN[s]?.sec || 'Others';
 
 /* ---------- chip groups ---------- */
 function single(groupId, key){
@@ -257,10 +296,13 @@ document.querySelectorAll('#prox .chip').forEach(x => {
   });
 });
 ['search','pTh'].forEach(id => $(id).addEventListener('input', render));
-['fFno','emaTf','fStreak'].forEach(id => $(id).addEventListener('change', render));
+['fFno','emaTf','fStreak','sort'].forEach(id => $(id).addEventListener('change', render));
+$('fSector').addEventListener('change', e => { state.sector = e.target.value; render(); });
 $('ftoggle').addEventListener('click', () => { $('fpanel').classList.toggle('open'); $('ftoggle').classList.toggle('active'); });
+$('hmToggle').addEventListener('click', () => { $('heat').classList.toggle('closed'); $('hmToggle').textContent = $('heat').classList.contains('closed') ? 'Show' : 'Hide'; });
 $('freset').addEventListener('click', () => {
   $('fFno').checked = false; $('emaTf').value = ''; $('pTh').value = '0.3'; $('fStreak').value = '';
+  $('fSector').value = ''; state.sector = '';
   state.e200 = ''; state.circ = ''; state.prox = {};
   ['e200','circs'].forEach(g => $(g).querySelectorAll('.chip').forEach((b, i) => b.classList.toggle('on', i === 0)));
   document.querySelectorAll('#prox .chip').forEach(x => { x.textContent = x.dataset.base; x.classList.remove('on','up','dn'); });
@@ -276,8 +318,10 @@ const PROX = {
   p9200: { a:(m)=>emaOf(m,'e9'), b:(m)=>emaOf(m,'e200') },
   pvwap: { a:(m,q)=>q?.ltp ?? m?.ltp, b:(m)=>m?.vwap },
 };
+const emaActive = () => !!state.e200 || Object.values(state.prox).some(Boolean);
+const circActive = () => !!state.circ || !!$('fStreak').value;
 
-/* circuit state: band prices from data.json, live LTP / day high / day low from venus.json */
+/* circuit state: band prices from data.json, live LTP / day high / day low from venus feed */
 function circ(m, q){
   if (!m || m.band == null || m.uc == null) return null;
   const ltp = q?.ltp ?? m.ltp, dh = q?.dh ?? m.dh, dl = q?.dl ?? m.dl;
@@ -311,8 +355,8 @@ function freshOk(p, key = state.combo){
 /* ---------- main filter ---------- */
 function passes(p, key = state.combo){
   const m = MAIN[p.s], q = quoteFor(key, p.s);
+  if (state.sector && sectorOf(p.s) !== state.sector) return false;
   if ($('fFno').checked && !m?.fno) return false;
-
   const th = Math.abs(+$('pTh').value) || 0.3;
   for (const id in state.prox) {
     const st = state.prox[id]; if (!st) continue;
@@ -342,8 +386,28 @@ function passes(p, key = state.combo){
   return true;
 }
 
-/* ---------- render ---------- */
+/* ---------- sorting ---------- */
+const ltpOf = p => quoteFor(state.combo, p.s)?.ltp ?? p.ltp ?? 0;
+const chgOf = p => quoteFor(state.combo, p.s)?.chg ?? MAIN[p.s]?.chg ?? -999;
+function boxDist(p){                    // % distance of LTP beyond the box edge in the pattern direction
+  const l = ltpOf(p); if (p.top == null || !l) return -999;
+  return p.side === 'U' ? (l - p.top) / p.top * 100 : (p.bot - l) / p.bot * 100;
+}
+const SORTS = {
+  def:     (a, b) => ST_ORDER[a.st] - ST_ORDER[b.st] || (b.sincee || 0) - (a.sincee || 0) || a.s.localeCompare(b.s),
+  fresh:   (a, b) => (b.sincee || 0) - (a.sincee || 0),
+  ltpD:    (a, b) => ltpOf(b) - ltpOf(a),
+  ltpA:    (a, b) => ltpOf(a) - ltpOf(b),
+  chgD:    (a, b) => chgOf(b) - chgOf(a),
+  chgA:    (a, b) => chgOf(a) - chgOf(b),
+  boxD:    (a, b) => boxDist(b) - boxDist(a),
+  sym:     (a, b) => a.s.localeCompare(b.s),
+  sector:  (a, b) => sectorOf(a.s).localeCompare(sectorOf(b.s)) || a.s.localeCompare(b.s),
+};
+
+/* ---------- cards ---------- */
 const f = v => v == null ? '–' : Number(v).toLocaleString('en-IN', {maximumFractionDigits:2});
+const pct = v => v == null ? '' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
 const cdl = c => c ? `${c.t}<br>${f(c.h)} / ${f(c.l)}` : '<span style="opacity:.5">waiting…</span>';
 
 function card(p){
@@ -352,6 +416,27 @@ function card(p){
   const box = p.top != null ? `${f(p.bot)} – ${f(p.top)}` : '–';
   const age = ageMin(p), c = circ(m, q);
   const ageTxt = age == null ? '' : age < 60 ? `${age} min` : age < 1440 ? `${Math.floor(age/60)}h ${age%60}m` : `${Math.floor(age/1440)}d`;
+  const chg = q?.chg ?? m?.chg;
+
+  let extra = '';
+  if (circActive() || (c && c.st === 'LOCK')) {
+    const cs = m?.cs || 0;
+    const band = m?.band != null ? `${m.band}% band` : 'no band';
+    const cl = c && c.st !== 'REV' ? `${c.s === 'U' ? 'UC' : 'LC'} ${CIRC_LABEL[c.st]}` : 'no circuit today';
+    extra += `<div class="info"><span class="ik">Circuit</span>
+      <span><b>${cl}</b></span><span>${band}</span>
+      ${m?.uc != null ? `<span>UC <b>${f(m.uc)}</b> · LC <b>${f(m.lc)}</b></span>` : ''}
+      <span>Streak <b>${cs > 0 ? `UC ×${cs}` : cs < 0 ? `LC ×${-cs}` : '0'}</b></span></div>`;
+  }
+  if (emaActive()) {
+    const tf = emaTf(), l = q?.ltp ?? p.ltp;
+    const e = k => { const v = emaOf(m, k); if (v == null) return `${k.toUpperCase()} –`;
+      const d = l ? (l - v) / v * 100 : null; return `${k.toUpperCase()} <b>${f(v)}</b>${d == null ? '' : ` <span class="${d >= 0 ? 'pos' : 'neg'}">${pct(d)}</span>`}`; };
+    extra += `<div class="info"><span class="ik">EMA ${TF_NAME[tf]}</span>
+      <span>${e('e9')}</span><span>${e('e21')}</span><span>${e('e50')}</span><span>${e('e200')}</span>
+      ${m?.vwap != null ? `<span>VWAP <b>${f(m.vwap)}</b></span>` : ''}</div>`;
+  }
+
   return `<div class="card">
     <div class="top">
       <span class="sym"><a href="${tv}" target="_blank" rel="noopener">${p.s}</a></span>
@@ -360,13 +445,15 @@ function card(p){
       ${age != null && age <= 30 ? `<span class="tag FRESH">FRESH ${age}m</span>` : ''}
       ${m?.fno ? '<span class="tag FNO">F&amp;O</span>' : ''}
       ${c && c.st !== 'REV' ? `<span class="tag CIRC">${c.s === 'U' ? 'UC' : 'LC'} ${CIRC_LABEL[c.st]}</span>` : ''}
-      <span class="ltp">${f(q?.ltp ?? p.ltp)}</span>
+      <span class="ltp">${f(q?.ltp ?? p.ltp)} <span class="${chg >= 0 ? 'pos' : 'neg'}">${pct(chg)}</span></span>
     </div>
+    <div class="sec">${sectorOf(p.s)}</div>
     <div class="box">
       <div class="cell"><div class="k">C1</div><div class="v">${cdl(p.c1)}</div></div>
       <div class="cell"><div class="k">C2</div><div class="v">${cdl(p.c2)}</div></div>
       <div class="cell"><div class="k">C3</div><div class="v">${cdl(p.c3)}</div></div>
     </div>
+    ${extra}
     <div class="foot">
       <span>Prev ${p.side === 'U' ? 'high' : 'low'} <b>${f(p.lvl)}</b></span>
       <span>Box <b>${box}</b></span>
@@ -378,8 +465,39 @@ function card(p){
   </div>`;
 }
 
+/* ---------- sector heatmap (today, whole scanned universe) ---------- */
+function heatColor(v){
+  const a = Math.min(Math.abs(v) / 3, 1) * 0.85 + 0.12;           // ±3% = full colour
+  return v >= 0 ? `color-mix(in srgb, var(--up) ${Math.round(a*100)}%, var(--panel))`
+                : `color-mix(in srgb, var(--dn) ${Math.round(a*100)}%, var(--panel))`;
+}
+function renderHeat(){
+  const qs = liveQuotes(), agg = {};
+  for (const s in qs) {
+    const v = qs[s]?.chg; if (v == null) continue;
+    const sec = sectorOf(s);
+    (agg[sec] ||= {n:0, sum:0, up:0, dn:0}); const a = agg[sec];
+    a.n++; a.sum += v; if (v > 0) a.up++; else if (v < 0) a.dn++;
+  }
+  const list = Object.entries(agg).map(([k, a]) => ({k, avg: a.sum / a.n, ...a})).sort((x, y) => y.avg - x.avg);
+  // sector dropdown (keeps selection)
+  const sel = $('fSector'), cur = state.sector;
+  const names = Object.keys(agg).sort();
+  sel.innerHTML = '<option value="">All sectors</option>' + names.map(n => `<option${n === cur ? ' selected' : ''}>${n}</option>`).join('');
+  if (!list.length) { $('heatGrid').innerHTML = '<div class="empty" style="padding:14px">Heatmap needs the updated scanner run (no % change data yet).</div>'; return; }
+  const src = useD5('D5') ? D5 : DATA;
+  $('heatMeta').textContent = `as of ${src?.updated || ''} · avg % change vs previous close · tap a tile to filter`;
+  $('heatGrid').innerHTML = list.map(x => `<button class="tile${x.k === cur ? ' sel' : ''}" data-sec="${x.k.replace(/"/g,'&quot;')}" style="background:${heatColor(x.avg)}">
+      <span class="tn">${x.k}</span><span class="tv">${pct(x.avg)}</span><span class="tb">↑${x.up} ↓${x.dn} · ${x.n}</span></button>`).join('');
+  $('heatGrid').querySelectorAll('.tile').forEach(t => t.addEventListener('click', () => {
+    state.sector = state.sector === t.dataset.sec ? '' : t.dataset.sec;
+    $('fSector').value = state.sector; render();
+  }));
+}
+
 function render(){
   if (!DATA) return;
+  renderHeat();
   const listFor = key => srcFor(key)?.combos?.[key] || [];
   const qs = $('search').value.trim().toUpperCase();
   const pre = (key) => listFor(key).filter(p =>
@@ -392,12 +510,11 @@ function render(){
   document.querySelectorAll('#status .chip').forEach(b => {
     b.querySelector('.n').textContent = base.filter(p => p.st === b.dataset.v).length;
   });
-  shown = base.filter(p => state.status.has(p.st)).sort((a, b) =>
-    ST_ORDER[a.st] - ST_ORDER[b.st] || (b.sincee || 0) - (a.sincee || 0) || a.s.localeCompare(b.s));
+  shown = base.filter(p => state.status.has(p.st)).sort(SORTS[$('sort').value] || SORTS.def);
 
   const mainNote = Object.keys(MAIN).length ? '' : ' · data.json not loaded (F&O / EMA / circuit filters inactive)';
   const src = srcFor(state.combo);
-  $('meta').textContent = `${shown.length} shown · ${src.scanned || 0} stocks scanned · ${src.universe || ''}${useD5(state.combo) ? ' · 5-min fast feed' : ''}${mainNote}`;
+  $('meta').textContent = `${shown.length} shown${state.sector ? ' · ' + state.sector : ''} · ${src.scanned || 0} stocks scanned · ${src.universe || ''}${useD5(state.combo) ? ' · 5-min fast feed' : ''}${mainNote}`;
   $('upd').textContent = 'Updated ' + src.updated;
   $('rows').innerHTML = shown.length ? shown.map(card).join('') :
     '<div class="empty">No stocks match this combination and filter right now.</div>';
@@ -416,8 +533,8 @@ function load(){
   const main = fetch('data.json' + bust).then(r => r.ok ? r.json() : null).catch(() => null);
   const d5 = fetch('venus_d5.json' + bust).then(r => r.ok ? r.json() : null).catch(() => null);
   Promise.all([venus, main, d5])
-    .then(([d, m, f]) => {
-      DATA = d; D5 = f;
+    .then(([d, m, x]) => {
+      DATA = d; D5 = x;
       if (m?.rows) { MAIN = {}; m.rows.forEach(r => MAIN[r.s] = r); }
       render();
     })
@@ -426,6 +543,7 @@ function load(){
 load();
 setInterval(load, 60 * 1000);   // 5-min feed lands any time, so poll every minute
 </script>
+
 
 </body>
 </html>
