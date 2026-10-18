@@ -24,6 +24,7 @@ resampled to 15m / 30m on a 09:15 anchor. Prev month/week/day high-low from dail
 Universe: Nifty 500 (NSE index constituents CSV).
 Output: venus.json (read by venus.html)
 """
+import argparse
 import json
 import time
 import logging
@@ -165,7 +166,12 @@ def r2(v):
 # ===============================
 # PATTERN ENGINE
 # ===============================
-def detect(bars, level, side, period):
+def bar_end_ms(ts, minutes):
+    cap = ts.replace(hour=SESSION_CLOSE[0], minute=SESSION_CLOSE[1], second=0)
+    return int(min(ts + pd.Timedelta(minutes=minutes), cap).timestamp() * 1000)
+
+
+def detect(bars, level, side, period, minutes):
     """Run the C1 -> C2 -> C3 -> box state machine on closed trigger bars."""
     up = side == "U"
     c = [None, None, None]
@@ -187,7 +193,8 @@ def detect(bars, level, side, period):
 
     out = {"side": side, "stage": stage, "lvl": r2(level),
            "c1": None, "c2": None, "c3": None,
-           "top": None, "bot": None, "st": "FORM", "bt": None, "ft": None, "since": None}
+           "top": None, "bot": None, "st": "FORM", "bt": None, "ft": None, "since": None,
+           "bte": None, "fte": None, "sincee": None}
     for i in range(stage):
         out[f"c{i+1}"] = {k: c[i][k] for k in ("t", "h", "l")}
 
@@ -210,32 +217,40 @@ def detect(bars, level, side, period):
         return "BO" if x < bot else ("FAIL" if x > top else "IN")
 
     st_prev = None
-    since = None
+    since = since_e = None
     for ts, row in after.iterrows():
         s = status(row["Close"])
         if s == "BO" and out["bt"] is None:
             out["bt"] = fmt(ts, period)
+            out["bte"] = bar_end_ms(ts, minutes)
         if s == "FAIL" and out["ft"] is None:
             out["ft"] = fmt(ts, period)
+            out["fte"] = bar_end_ms(ts, minutes)
         if s != st_prev:
             since = fmt(ts, period)
+            since_e = bar_end_ms(ts, minutes)
             st_prev = s
     if after.empty:
         out["st"] = "IN"
     else:
         out["st"] = st_prev
         out["since"] = since
+        out["sincee"] = since_e   # candle-close time (epoch ms) when price moved outside the box
     return out
 
 
-def process(base, daily, df5, now_ist):
+def process(base, daily, df5, now_ist, combos=COMBOS):
     daily = clean_ohlc(daily)
     df5 = in_session(clean_ohlc(to_ist(df5)))
     if daily.empty or df5.empty:
         return None
     cur_day = df5.index[-1].date()           # last trading day in data (weekend/holiday safe)
+    today = df5[df5.index.date == cur_day]
+    done5 = today[today.index + pd.Timedelta(minutes=5) <= now_ist]
+    quote = {"ltp": r2(today["Close"].iloc[-1]), "dh": r2(today["High"].max()), "dl": r2(today["Low"].min()),
+             "asof": bar_end_ms(done5.index[-1], 5) if not done5.empty else None}
     res = {}
-    for key, (period, mins) in COMBOS.items():
+    for key, (period, mins) in combos.items():
         hl = prev_period_hl(daily, period, cur_day)
         if hl is None:
             continue
@@ -246,33 +261,58 @@ def process(base, daily, df5, now_ist):
             continue
         found = []
         for side, lvl in (("U", hl[0]), ("D", hl[1])):
-            p = detect(bars, lvl, side, period)
+            p = detect(bars, lvl, side, period, mins)
             if p:
                 p["bar"] = fmt(bars.index[-1], period)
                 found.append(p)
         if found:
             res[key] = found
-    return res
+    return res, quote
 
 
 # ===============================
 # MAIN
 # ===============================
+def download(chunk, tries=3, **kw):
+    """yf.download with retry (Yahoo sometimes rate-limits frequent runs)."""
+    for t in range(tries):
+        try:
+            df = yf.download(chunk, group_by="ticker", threads=True, progress=False,
+                             auto_adjust=False, **kw)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            print(f"download error (try {t + 1}): {e}")
+        time.sleep(3 * (t + 1))
+    raise RuntimeError("download failed")
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--combos", default="M30,W15,D5", help="comma list, e.g. D5")
+    ap.add_argument("--out", default=OUT_FILE)
+    args = ap.parse_args()
+    run = {k: COMBOS[k] for k in args.combos.split(",") if k in COMBOS}
+    fast = set(run) == {"D5"}           # day-only mode: tiny downloads, runs every 5 min
+
     symbols = load_universe()
     now_ist = datetime.now(IST)
     today = now_ist.date()
-    start_5m = min(today.replace(day=1), today - timedelta(days=today.weekday())) - timedelta(days=4)
-    combos = {k: [] for k in COMBOS}
+    if fast:
+        start_5m = today - timedelta(days=5)      # covers weekends / a holiday
+        daily_period = "10d"
+    else:
+        start_5m = min(today.replace(day=1), today - timedelta(days=today.weekday())) - timedelta(days=4)
+        daily_period = "4mo"
+    combos = {k: [] for k in run}
+    quotes = {}
     ok = fail = 0
 
     for i in range(0, len(symbols), CHUNK):
         chunk = [s + ".NS" for s in symbols[i:i + CHUNK]]
         try:
-            dd = yf.download(chunk, period="4mo", interval="1d", group_by="ticker",
-                             threads=True, progress=False, auto_adjust=False)
-            d5 = yf.download(chunk, start=start_5m.isoformat(), interval="5m", group_by="ticker",
-                             threads=True, progress=False, auto_adjust=False)
+            dd = download(chunk, period=daily_period, interval="1d")
+            d5 = download(chunk, start=start_5m.isoformat(), interval="5m")
         except Exception as e:
             print(f"chunk {i} download failed: {e}")
             fail += len(chunk)
@@ -282,11 +322,13 @@ def main():
             try:
                 a = dd[sym] if isinstance(dd.columns, pd.MultiIndex) else dd
                 b = d5[sym] if isinstance(d5.columns, pd.MultiIndex) else d5
-                r = process(base, a.dropna(how="all"), b.dropna(how="all"), now_ist)
-                if r is None:
+                out = process(base, a.dropna(how="all"), b.dropna(how="all"), now_ist, run)
+                if out is None:
                     fail += 1
                     continue
+                r, quote = out
                 ok += 1
+                quotes[base] = quote
                 for key, pats in r.items():
                     for p in pats:
                         p["s"] = base
@@ -294,18 +336,20 @@ def main():
             except Exception as e:
                 fail += 1
         print(f"{min(i + CHUNK, len(symbols))}/{len(symbols)} | ok={ok} fail={fail}")
-        time.sleep(0.8)
+        time.sleep(0.3 if fast else 0.8)
 
     payload = {
         "updated": datetime.now(IST).strftime("%Y-%m-%d %H:%M IST"),
         "updatedUtc": datetime.now(timezone.utc).isoformat(),
         "universe": "Nifty 500",
         "scanned": ok,
+        "asof": max([q["asof"] for q in quotes.values() if q.get("asof")], default=None),
+        "quotes": quotes,         # today's ltp / day high / day low per symbol (for circuit filters)
         "combos": combos,
     }
-    with open(OUT_FILE, "w") as f:
+    with open(args.out, "w") as f:
         json.dump(payload, f, separators=(",", ":"))
-    print(f"Saved {OUT_FILE}: " + ", ".join(f"{k}={len(v)}" for k, v in combos.items()))
+    print(f"Saved {args.out}: " + ", ".join(f"{k}={len(v)}" for k, v in combos.items()))
 
 
 if __name__ == "__main__":
