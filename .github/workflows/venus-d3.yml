@@ -4,9 +4,10 @@ on:
   workflow_dispatch:          # cron-job.org primary trigger (every 3 min) + manual run
   schedule:
     # Backup only — GitHub cron is unreliable at 3-min spacing. UTC = IST - 5:30
-    - cron: "48,51,54,57 3 * * 1-5"   # 09:18 ... 09:27 IST
-    - cron: "*/3 4-9 * * 1-5"         # 09:30 ... 15:27 IST
-    - cron: "0,3 10 * * 1-5"          # 15:30, 15:33 IST final
+    # Runs 1 min after each 3-min candle close (09:18, 09:21 ... 15:30) so Yahoo has the data
+    - cron: "49,52,55,58 3 * * 1-5"   # 09:19 ... 09:28 IST
+    - cron: "1-58/3 4-9 * * 1-5"      # 09:31 ... 15:28 IST
+    - cron: "1 10 * * 1-5"            # 15:31 IST final
 
 permissions:
   contents: write
