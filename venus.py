@@ -47,6 +47,7 @@ COMBOS = {               # key: (reference period, trigger minutes)
     "M30": ("M", 30),
     "W15": ("W", 15),
     "D5":  ("D", 5),
+    "D3":  ("D", 3),     # built from 1-min data (yfinance has no 3m interval)
 }
 
 
@@ -99,17 +100,17 @@ def in_session(df):
     return df[(t >= lo) & (t < hi)]
 
 
-def resample_closed(df5, minutes, now_ist):
-    """Build `minutes` bars from 5m bars on a 09:15 anchor, keep only fully closed bars."""
+def resample_closed(df5, minutes, now_ist, base_min=5):
+    """Build `minutes` bars from base (5m or 1m) bars on a 09:15 anchor, keep only fully closed bars."""
     if df5.empty:
         return df5
-    # keep only 5m bars that have finished
-    df5 = df5[df5.index + pd.Timedelta(minutes=5) <= now_ist]
+    # keep only base bars that have finished
+    df5 = df5[df5.index + pd.Timedelta(minutes=base_min) <= now_ist]
     if df5.empty:
         return df5
-    last_5m_end = df5.index[-1] + pd.Timedelta(minutes=5)
+    last_5m_end = df5.index[-1] + pd.Timedelta(minutes=base_min)
 
-    if minutes == 5:
+    if minutes == base_min:
         bars = df5.copy()
     else:
         bars = df5.resample(f"{minutes}min", origin="start_day", offset="15min",
@@ -241,20 +242,20 @@ def detect(bars, level, side, period, minutes):
     return out
 
 
-def process(base, daily, df5, now_ist, combos=COMBOS):
+def process(base, daily, df5, now_ist, combos=COMBOS, base_min=5):
     daily = clean_ohlc(daily)
     df5 = in_session(clean_ohlc(to_ist(df5)))
     if daily.empty or df5.empty:
         return None
     cur_day = df5.index[-1].date()           # last trading day in data (weekend/holiday safe)
     today = df5[df5.index.date == cur_day]
-    done5 = today[today.index + pd.Timedelta(minutes=5) <= now_ist]
+    done5 = today[today.index + pd.Timedelta(minutes=base_min) <= now_ist]
     prev_d = daily[daily.index.date < cur_day]
     pc = float(prev_d["Close"].iloc[-1]) if not prev_d.empty else None
     ltp = float(today["Close"].iloc[-1])
     quote = {"ltp": r2(ltp), "dh": r2(today["High"].max()), "dl": r2(today["Low"].min()),
              "pc": r2(pc), "chg": r2((ltp / pc - 1) * 100) if pc else None,
-             "asof": bar_end_ms(done5.index[-1], 5) if not done5.empty else None}
+             "asof": bar_end_ms(done5.index[-1], base_min) if not done5.empty else None}
     res = {}
     for key, (period, mins) in combos.items():
         hl = prev_period_hl(daily, period, cur_day)
@@ -262,7 +263,7 @@ def process(base, daily, df5, now_ist, combos=COMBOS):
             continue
         start = period_start(period, cur_day)
         seg = df5[df5.index.date >= start]
-        bars = resample_closed(seg, mins, now_ist)
+        bars = resample_closed(seg, mins, now_ist, base_min)
         if bars.empty:
             continue
         found = []
@@ -299,7 +300,8 @@ def main():
     ap.add_argument("--out", default=OUT_FILE)
     args = ap.parse_args()
     run = {k: COMBOS[k] for k in args.combos.split(",") if k in COMBOS}
-    fast = set(run) == {"D5"}           # day-only mode: tiny downloads, runs every 5 min
+    fast = set(run) <= {"D5", "D3"}     # day-only mode: tiny downloads, runs every 3-5 min
+    base_iv, base_min = ("1m", 1) if "D3" in run else ("5m", 5)
 
     symbols, sectors = load_universe()
     now_ist = datetime.now(IST)
@@ -318,7 +320,10 @@ def main():
         chunk = [s + ".NS" for s in symbols[i:i + CHUNK]]
         try:
             dd = download(chunk, period=daily_period, interval="1d")
-            d5 = download(chunk, start=start_5m.isoformat(), interval="5m")
+            if base_min == 1:      # 1-min only needed for the latest session
+                d5 = download(chunk, period="1d", interval="1m")
+            else:
+                d5 = download(chunk, start=start_5m.isoformat(), interval="5m")
         except Exception as e:
             print(f"chunk {i} download failed: {e}")
             fail += len(chunk)
@@ -328,7 +333,7 @@ def main():
             try:
                 a = dd[sym] if isinstance(dd.columns, pd.MultiIndex) else dd
                 b = d5[sym] if isinstance(d5.columns, pd.MultiIndex) else d5
-                out = process(base, a.dropna(how="all"), b.dropna(how="all"), now_ist, run)
+                out = process(base, a.dropna(how="all"), b.dropna(how="all"), now_ist, run, base_min)
                 if out is None:
                     fail += 1
                     continue

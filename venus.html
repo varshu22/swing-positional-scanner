@@ -149,7 +149,7 @@ html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .fpanel{border:2px out
     <span class="wordmark">Tapewatch</span>
     <div>
       <div class="htitle">Venus · 3-candle box</div>
-      <div class="hsub">Nifty 500 · M/30m &amp; W/15m every 15 min · D/5m every 5 min (market hours)</div>
+      <div class="hsub">Nifty 500 · M/30m &amp; W/15m every 15 min · D/5m every 5 min · D/3m every 3 min</div>
     </div>
     <a class="back" href="./">← Swing / Positional</a>
     <div class="upd" id="upd">loading…</div>
@@ -165,6 +165,7 @@ html[data-theme^="retro"] .fbtn,html[data-theme^="retro"] .fpanel{border:2px out
     <button class="chip on" data-c="M30">Month · 30m<span class="n"></span></button>
     <button class="chip" data-c="W15">Week · 15m<span class="n"></span></button>
     <button class="chip" data-c="D5">Day · 5m<span class="n"></span></button>
+    <button class="chip" data-c="D3">Day · 3m<span class="n"></span></button>
   </div>
   <div class="bar" id="side">
     <span class="lbl">Direction</span>
@@ -256,19 +257,22 @@ try { document.documentElement.setAttribute('data-theme', localStorage.getItem('
 
 const ST_LABEL = {BO:'Breakout', FAIL:'Pattern Fail', IN:'Inside box', FORM:'Forming'};
 const ST_ORDER = {BO:0, FAIL:1, IN:2, FORM:3};
-const COMBO_TF = {M30:'m', W15:'w', D5:'d'};          // EMA timeframe used in "Auto"
+const COMBO_TF = {M30:'m', W15:'w', D5:'d', D3:'d'};          // EMA timeframe used in "Auto"
 const TF_NAME = {d:'Daily', w:'Weekly', m:'Monthly'};
 const NEAR_UC = 1;
 const state = {combo:'M30', side:'', status:new Set(['BO','FAIL']), fresh:'', e200:'', circ:'', prox:{}, sector:''};
-let DATA = null, D5 = null, MAIN = {}, shown = [];
+let DATA = null, D5 = null, D3 = null, MAIN = {}, shown = [];
 
 /* Day-5m comes from the 5-min fast run (venus_d5.json) when it is newer than the 15-min run */
-const useD5 = key => key === 'D5' && D5 && (D5.asof || 0) >= (DATA?.asof || 0);
-const srcFor = key => useD5(key) ? D5 : DATA;
+/* Day-3m comes only from the 3-min fast run (venus_d3.json) */
+const FEED = () => ({D5, D3});
+const useD5 = key => { const f = FEED()[key]; return !!f && (key === 'D3' || (f.asof || 0) >= (DATA?.asof || 0)); };
+const srcFor = key => useD5(key) ? FEED()[key] : (key === 'D3' ? null : DATA);
 const asofFor = key => srcFor(key)?.asof;
 const quoteFor = (key, s) => srcFor(key)?.quotes?.[s] ?? DATA?.quotes?.[s];
-const liveQuotes = () => (useD5('D5') ? D5.quotes : DATA?.quotes) || {};      // freshest quotes for the heatmap
-const sectorOf = s => DATA?.sector?.[s] || D5?.sector?.[s] || MAIN[s]?.sec || 'Others';
+const freshest = () => [DATA, D5, D3].filter(Boolean).sort((a, b) => (b.asof || 0) - (a.asof || 0))[0];
+const liveQuotes = () => freshest()?.quotes || DATA?.quotes || {};      // freshest quotes for the heatmap
+const sectorOf = s => DATA?.sector?.[s] || D5?.sector?.[s] || D3?.sector?.[s] || MAIN[s]?.sec || 'Others';
 
 /* ---------- chip groups ---------- */
 function single(groupId, key){
@@ -485,7 +489,7 @@ function renderHeat(){
   const names = Object.keys(agg).sort();
   sel.innerHTML = '<option value="">All sectors</option>' + names.map(n => `<option${n === cur ? ' selected' : ''}>${n}</option>`).join('');
   if (!list.length) { $('heatGrid').innerHTML = '<div class="empty" style="padding:14px">Heatmap needs the updated scanner run (no % change data yet).</div>'; return; }
-  const src = useD5('D5') ? D5 : DATA;
+  const src = freshest();
   $('heatMeta').textContent = `as of ${src?.updated || ''} · avg % change vs previous close · tap a tile to filter`;
   $('heatGrid').innerHTML = list.map(x => `<button class="tile${x.k === cur ? ' sel' : ''}" data-sec="${x.k.replace(/"/g,'&quot;')}" style="background:${heatColor(x.avg)}">
       <span class="tn">${x.k}</span><span class="tv">${pct(x.avg)}</span><span class="tb">↑${x.up} ↓${x.dn} · ${x.n}</span></button>`).join('');
@@ -513,11 +517,12 @@ function render(){
   shown = base.filter(p => state.status.has(p.st)).sort(SORTS[$('sort').value] || SORTS.def);
 
   const mainNote = Object.keys(MAIN).length ? '' : ' · data.json not loaded (F&O / EMA / circuit filters inactive)';
-  const src = srcFor(state.combo);
-  $('meta').textContent = `${shown.length} shown${state.sector ? ' · ' + state.sector : ''} · ${src.scanned || 0} stocks scanned · ${src.universe || ''}${useD5(state.combo) ? ' · 5-min fast feed' : ''}${mainNote}`;
-  $('upd').textContent = 'Updated ' + src.updated;
-  $('rows').innerHTML = shown.length ? shown.map(card).join('') :
-    '<div class="empty">No stocks match this combination and filter right now.</div>';
+  const src = srcFor(state.combo) || {};
+  $('meta').textContent = `${shown.length} shown${state.sector ? ' · ' + state.sector : ''} · ${src.scanned || 0} stocks scanned · ${src.universe || ''}${useD5(state.combo) ? ` · ${state.combo === 'D3' ? '3' : '5'}-min fast feed` : ''}${mainNote}`;
+  $('upd').textContent = src.updated ? 'Updated ' + src.updated : (state.combo === 'D3' ? 'D3 feed not available yet' : '');
+  $('rows').innerHTML = shown.length ? shown.map(card).join('') : (state.combo === 'D3' && !D3)
+    ? '<div class="empty">venus_d3.json not found. Run the "Venus D3 fast" workflow once from the Actions tab.</div>'
+    : '<div class="empty">No stocks match this combination and filter right now.</div>';
 }
 
 $('copy').addEventListener('click', async () => {
@@ -532,9 +537,10 @@ function load(){
   const venus = fetch('venus.json' + bust).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
   const main = fetch('data.json' + bust).then(r => r.ok ? r.json() : null).catch(() => null);
   const d5 = fetch('venus_d5.json' + bust).then(r => r.ok ? r.json() : null).catch(() => null);
-  Promise.all([venus, main, d5])
-    .then(([d, m, x]) => {
-      DATA = d; D5 = x;
+  const d3 = fetch('venus_d3.json' + bust).then(r => r.ok ? r.json() : null).catch(() => null);
+  Promise.all([venus, main, d5, d3])
+    .then(([d, m, x, y]) => {
+      DATA = d; D5 = x; D3 = y;
       if (m?.rows) { MAIN = {}; m.rows.forEach(r => MAIN[r.s] = r); }
       render();
     })
