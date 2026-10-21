@@ -1,0 +1,60 @@
+name: Venus D3 fast
+
+on:
+  workflow_dispatch:          # cron-job.org primary trigger (every 3 min) + manual run
+  schedule:
+    # Backup only — GitHub cron is unreliable at 3-min spacing. UTC = IST - 5:30
+    - cron: "48,51,54,57 3 * * 1-5"   # 09:18 ... 09:27 IST
+    - cron: "*/3 4-9 * * 1-5"         # 09:30 ... 15:27 IST
+    - cron: "0,3 10 * * 1-5"          # 15:30, 15:33 IST final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: venus-d3
+  cancel-in-progress: false
+
+jobs:
+  d3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Venus D3
+        run: python venus.py --combos D3 --out venus_d3.json
+
+      - name: Commit venus_d3.json
+        run: |
+          git config user.name "venus-bot"
+          git config user.email "actions@users.noreply.github.com"
+          BR="${GITHUB_REF_NAME}"
+          git add venus_d3.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          MSG="venus-d3: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git fetch origin "$BR" --depth=2
+          HEAD_SHA=$(git rev-parse HEAD)
+          # Keep history small: if the last commit on the branch is a D3/D5 fast-feed commit,
+          # replace it (amend) instead of stacking a new one every 5 minutes.
+          if [ "$HEAD_SHA" = "$(git rev-parse origin/$BR)" ] && \
+             git log -1 --format=%s | grep -qE '^venus-d[35]:'; then
+            git commit --amend -m "$MSG"
+            if git push --force-with-lease="$BR:$HEAD_SHA" origin "HEAD:$BR"; then exit 0; fi
+            echo "lease failed (someone else pushed) -> normal commit"
+            git reset --soft "$HEAD_SHA"
+          fi
+          git commit -m "$MSG"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$BR" && git push origin "HEAD:$BR" && exit 0
+            echo "push failed, retry $i"; sleep $((i * 3))
+          done
+          exit 1

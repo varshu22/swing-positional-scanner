@@ -43,10 +43,10 @@ jobs:
           MSG="venus-d5: $(date -u +'%Y-%m-%d %H:%M UTC')"
           git fetch origin "$BR" --depth=2
           HEAD_SHA=$(git rev-parse HEAD)
-          # Keep history small: if the last commit on the branch is our own D5 commit,
+          # Keep history small: if the last commit on the branch is a D3/D5 fast-feed commit,
           # replace it (amend) instead of stacking a new one every 5 minutes.
           if [ "$HEAD_SHA" = "$(git rev-parse origin/$BR)" ] && \
-             git log -1 --format=%s | grep -q '^venus-d5:'; then
+             git log -1 --format=%s | grep -qE '^venus-d[35]:'; then
             git commit --amend -m "$MSG"
             if git push --force-with-lease="$BR:$HEAD_SHA" origin "HEAD:$BR"; then exit 0; fi
             echo "lease failed (someone else pushed) -> normal commit"
