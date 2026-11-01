@@ -1,0 +1,37 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]            # aapke apne manual commits
+  workflow_dispatch:
+  workflow_run:                 # bot commits (GITHUB_TOKEN) push event trigger nahi karte, isliye ye
+    workflows: ["Update scanner data", "Venus scanner", "Venus D3 fast", "Venus D5 fast", "Sun scanner"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Ek waqt me ek hi deploy. Naya aaye to wo queue me rukta hai (purana pending wala
+# naye se replace ho jaata hai), isliye hamesha LATEST commit hi deploy hota hai.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main             # workflow_run me bhi branch ka latest commit lo
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
