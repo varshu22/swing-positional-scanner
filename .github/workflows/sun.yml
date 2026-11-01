@@ -1,0 +1,41 @@
+name: Sun scanner
+
+on:
+  workflow_dispatch:          # cron-job.org primary trigger + manual "Run workflow"
+  schedule:
+    # Backup only. UTC = IST - 5:30  ->  15:20 IST, Mon-Fri
+    - cron: "50 9 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sun
+  cancel-in-progress: false
+
+jobs:
+  sun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Sun scanner
+        run: python sun.py
+      - name: Commit sun.json
+        run: |
+          git config user.name "sun-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add sun.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "sun: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push failed, retry $i"; sleep $((i * 5))
+          done
+          exit 1
