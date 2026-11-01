@@ -35,6 +35,30 @@ tr:hover td{background:var(--panel)}
 .tag{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:5px;background:var(--panel2);color:var(--muted);font-family:var(--mono)}
 .pos{color:var(--up)} .neg{color:var(--dn)}
 .also{color:var(--muted);font-size:11px}
+.lb{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
+.mpick{position:relative}
+.mbtn{display:flex;align-items:center;gap:10px;min-width:170px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:7px 12px;border-radius:10px;cursor:pointer;font-family:var(--mono);font-size:13px}
+.mbtn.on{border-color:var(--acc);background:var(--acc-dim);color:var(--acc)}
+.mbtn .cap{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.mbtn .val{font-weight:600}
+.mbtn .car{margin-left:auto;transition:transform .15s}
+.mpick.open .car{transform:rotate(180deg)}
+.mpanel{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);width:260px}
+.mpick.open .mpanel{display:block}
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mcell{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:8px 0;text-align:center;cursor:pointer;font-family:var(--mono);font-size:13px}
+.mcell:hover{border-color:var(--acc)}
+.mcell.on{background:var(--acc);color:#14100A;border-color:var(--acc);font-weight:700}
+.mcell small{display:block;font-size:9px;opacity:.7}
+.ydiv{width:1px;background:var(--line)}
+.mpanel.y{width:300px}.mpanel.y .mgrid{grid-template-columns:repeat(5,1fr)}
+.tolrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cust{display:flex;align-items:center;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:0 10px 0 4px;font-family:var(--mono);font-size:12px}
+.cust.on{border-color:var(--acc);background:var(--acc-dim);color:var(--acc)}
+.cust span{color:var(--muted);padding-left:4px}
+.cust input{width:58px;background:transparent;border:0;outline:0;color:inherit;font:inherit;padding:5px 4px;text-align:right}
+.chip.off{opacity:.45;text-decoration:line-through}
+.hint{font-size:11px;color:var(--muted);margin-left:4px}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 </style>
 </head>
@@ -46,55 +70,101 @@ tr:hover td{background:var(--panel)}
   <span class="upd" id="upd">loading…</span>
 </div></header>
 <main>
-  <div class="grp"><div class="lab">Lookback (completed monthly candles)</div><div class="chips" id="win"></div></div>
-  <div class="grp"><div class="lab">Distance from high</div><div class="chips" id="tol"></div></div>
+  <div class="grp"><div class="lab">Lookback (completed monthly candles)</div>
+    <div class="lb">
+      <div class="mpick" id="mp"><button class="mbtn" type="button" data-for="mp"><span><span class="cap">Months</span><br><span class="val" id="mval"></span></span><span class="car">▾</span></button>
+        <div class="mpanel"><div class="mgrid" id="mgrid"></div></div></div>
+      <div class="ydiv"></div>
+      <div class="mpick" id="yp"><button class="mbtn" type="button" data-for="yp"><span><span class="cap">Years</span><br><span class="val" id="yval"></span></span><span class="car">▾</span></button>
+        <div class="mpanel y"><div class="mgrid" id="ygrid"></div></div></div>
+    </div></div>
+  <div class="grp"><div class="lab">Distance from high</div>
+    <div class="tolrow"><div class="chips" id="tol"></div>
+      <label class="cust" id="custw"><span>±</span><input id="cust" type="number" min="0" step="0.1" placeholder="custom"><span>%</span></label></div></div>
   <div class="grp"><div class="lab">Side</div><div class="chips" id="side"></div></div>
+  <div class="grp"><div class="lab">All-time high</div><div class="chips" id="ath"></div></div>
+  <div class="grp"><div class="lab">Series <span class="hint">(tap to include / exclude)</span></div><div class="chips" id="ser"></div></div>
   <div class="grp"><div class="lab">Filters</div><div class="chips" id="flt"></div></div>
   <input class="search" id="q" placeholder="Search symbol / sector">
   <div class="stat" id="stat"></div>
   <div class="tw"><table><thead><tr>
-    <th data-k="s">Stock</th><th data-k="ltp">LTP</th><th data-k="hi">High</th><th data-k="hm">High month</th><th data-k="d">Dist %</th><th data-k="also">Also near</th>
+    <th data-k="s">Stock</th><th data-k="ltp">LTP</th><th data-k="hi">High</th><th data-k="hm">High month</th><th data-k="ad">Dist %</th><th data-k="lg">Near high of up to</th>
   </tr></thead><tbody id="tb"></tbody></table></div>
 </main>
 <script>
-const S={win:'6M',tol:5,side:'both',fno:false,eqOnly:false,q:'',sort:'ad',dir:1};
+const S={n:6,tol:5,custom:false,side:'both',ath:'all',fno:false,ser:{EQ:true,BE:true,BZ:true},q:'',sort:'ad',dir:1};
 let D=null;
 const TOLS=[1,2,5], SIDES=[['both','± around'],['below','Below high (pre-breakout)'],['above','Above high (just broke)']];
-function chips(id,items,key,cb){const el=document.getElementById(id);el.innerHTML='';
-  items.forEach(([v,l])=>{const b=document.createElement('button');b.className='chip'+(S[key]===v?' on':'');b.textContent=l;
-    b.onclick=()=>{S[key]=(typeof S[key]==='boolean')?!S[key]:v;cb&&cb();render();};el.appendChild(b);});}
-function drawChips(){
-  chips('win',D.windows.map(w=>[w,w]),'win',drawChips);
-  chips('tol',TOLS.map(t=>[t,'± '+t+'%']),'tol',drawChips);
-  chips('side',SIDES,'side',drawChips);
-  const f=document.getElementById('flt');f.innerHTML='';
-  [['fno','F&O only'],['eqOnly','EQ series only']].forEach(([k,l])=>{const b=document.createElement('button');
-    b.className='chip'+(S[k]?' on':'');b.textContent=l;b.onclick=()=>{S[k]=!S[k];drawChips();render();};f.appendChild(b);});
+const $=id=>document.getElementById(id);
+const lbl=n=>n%12===0?(n/12)+(n===12?' year':' years'):n+(n===1?' month':' months');
+const span=n=>{const y=Math.floor(n/12),m=n%12;return (y?y+'Y':'')+(y&&m?' ':'')+(m?m+'M':'');};
+
+// high of last N completed months from breakpoints; null if not enough history
+function winHigh(r,N){const need=Math.max(1,Math.floor(N*D.minCover));
+  if(r.span<N||r.cnt<need)return null; let b=null;
+  for(const x of r.bp){if(x[0]<=N)b=x;else break;} return b;}
+const okD=d=>d!=null&&Math.abs(d)<=S.tol&&(S.side==='both'||(S.side==='below'?d<=0:d>=0));
+const dist=(ltp,hi)=>(ltp-hi)/hi*100;
+// longest lookback (months) whose high is still within the distance filter
+function longest(r){let best=0;const bp=r.bp;
+  for(let i=0;i<bp.length;i++){const hi=bp[i][1];if(!okD(dist(r.ltp,hi)))continue;
+    const top=i+1<bp.length?bp[i+1][0]-1:r.span; if(top>best)best=top;}
+  return best;}
+
+function chips(id,items,isOn,onTap){const el=$(id);el.innerHTML='';
+  items.forEach(([v,l])=>{const b=document.createElement('button');b.type='button';b.className='chip'+(isOn(v)?' on':'');
+    b.textContent=l;b.onclick=()=>{onTap(v);draw();render();};el.appendChild(b);});}
+function grid(id,vals,sub,pick){const g=$(id);g.innerHTML='';
+  vals.forEach(([v,t,s])=>{const b=document.createElement('button');b.type='button';b.className='mcell'+(S.n===v?' on':'');
+    b.innerHTML=t+'<small>'+s+'</small>';b.onclick=e=>{e.stopPropagation();S.n=v;closeAll();draw();render();};g.appendChild(b);});}
+function closeAll(){document.querySelectorAll('.mpick').forEach(p=>p.classList.remove('open'));}
+function draw(){
+  const isY=S.n%12===0, isM=S.n<=12;
+  $('mval').textContent=isM?lbl(S.n):'Pick 1–12'; $('yval').textContent=isY?lbl(S.n):'Pick 1–20';
+  document.querySelector('[data-for=mp]').classList.toggle('on',isM);
+  document.querySelector('[data-for=yp]').classList.toggle('on',isY);
+  grid('mgrid',Array.from({length:12},(_,i)=>[i+1,i+1,i?'months':'month']));
+  grid('ygrid',Array.from({length:20},(_,i)=>[(i+1)*12,i+1,i?'years':'year']));
+  chips('tol',TOLS.map(t=>[t,'± '+t+'%']),v=>!S.custom&&S.tol===v,v=>{S.tol=v;S.custom=false;$('cust').value='';});
+  $('custw').classList.toggle('on',S.custom);
+  chips('side',SIDES,v=>S.side===v,v=>S.side=v);
+  chips('ath',[['all','Sab'],['only','Sirf ATH wale'],['hide','ATH wale hatao']],v=>S.ath===v,v=>S.ath=v);
+  const sb=$('ser');sb.innerHTML='';
+  ['EQ','BE','BZ'].forEach(k=>{const b=document.createElement('button');b.type='button';
+    b.className='chip'+(S.ser[k]?' on':' off');b.textContent=k;b.onclick=()=>{S.ser[k]=!S.ser[k];draw();render();};sb.appendChild(b);});
+  chips('flt',[['fno','F&O only']],()=>S.fno,()=>S.fno=!S.fno);
 }
-const ok=(d)=>d!=null&&Math.abs(d)<=S.tol&&(S.side==='both'||(S.side==='below'?d<=0:d>=0));
 function render(){
   const q=S.q.trim().toUpperCase(); let rows=[];
-  for(const r of D.rows){const w=r.w[S.win]; if(!w)continue; const d=w[1]; if(!ok(d))continue;
-    if(S.fno&&!r.fno)continue; if(S.eqOnly&&r.ser!=='EQ')continue;
+  for(const r of D.rows){
+    if(!S.ser[r.ser]||(S.fno&&!r.fno))continue;
     if(q&&!r.s.includes(q)&&!(r.sec||'').toUpperCase().includes(q))continue;
-    const also=D.windows.filter(k=>k!==S.win&&r.w[k]&&ok(r.w[k][1]));
-    rows.push({r,s:r.s,ltp:r.ltp,hi:w[0],hm:w[2],d,ad:Math.abs(d),also});}
-  const k=S.sort; rows.sort((a,b)=>{let x=k==='also'?a.also.length:a[k],y=k==='also'?b.also.length:b[k];
-    return (x>y?1:x<y?-1:0)*S.dir;});
+    const b=winHigh(r,S.n); if(!b)continue; const d=dist(r.ltp,b[1]); if(!okD(d))continue;
+    const ath=b===r.bp[r.bp.length-1];             // this high is the highest in the whole history
+    if((S.ath==='only'&&!ath)||(S.ath==='hide'&&ath))continue;
+    rows.push({ath,r,s:r.s,ltp:r.ltp,hi:b[1],hm:b[2],d,ad:Math.abs(d),lg:longest(r)});}
+  const k=S.sort; rows.sort((a,b)=>(a[k]>b[k]?1:a[k]<b[k]?-1:0)*S.dir);
   const fmt=v=>v==null?'–':v.toLocaleString('en-IN',{maximumFractionDigits:2});
-  document.getElementById('stat').textContent=`${rows.length} stocks · ${S.win} high · ±${S.tol}% · ${D.rows.length} scanned`;
-  document.getElementById('tb').innerHTML=rows.length?rows.map(x=>`<tr>
+  $('stat').textContent=`${rows.length} stocks · ${lbl(S.n)} high · ±${S.tol}% · ${D.rows.length} scanned`;
+  $('tb').innerHTML=rows.length?rows.map(x=>`<tr>
     <td class="sym"><a href="https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(x.s)}" target="_blank" rel="noopener">${x.s}</a>${x.r.fno?'<span class="tag">F&O</span>':''}${x.r.ser!=='EQ'?`<span class="tag">${x.r.ser}</span>`:''}${x.r.sec?`<div class="also">${x.r.sec}</div>`:''}</td>
-    <td>${fmt(x.ltp)}</td><td>${fmt(x.hi)}</td><td>${x.hm}</td>
+    <td>${fmt(x.ltp)}</td><td>${fmt(x.hi)}</td><td>${x.hm}${x.ath?'<span class="tag" style="color:var(--acc)">ATH</span>':''}</td>
     <td class="${x.d>=0?'pos':'neg'}">${x.d>0?'+':''}${x.d.toFixed(2)}</td>
-    <td class="also">${x.also.join(' ')||'–'}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Is filter par koi stock nahi</td></tr>';
+    <td class="also">${x.lg>=x.r.span?'All data ('+span(x.r.span)+')':span(x.lg)}</td></tr>`).join('')
+    :'<tr><td colspan="6" class="empty">Is filter par koi stock nahi</td></tr>';
 }
-document.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k==='d'?'ad':th.dataset.k;
-  if(S.sort===k)S.dir*=-1;else{S.sort=k;S.dir=1;}render();});
-document.getElementById('q').oninput=e=>{S.q=e.target.value;render();};
-fetch('sun.json?t='+Date.now()).then(r=>r.json()).then(j=>{D=j;
-  document.getElementById('upd').textContent='Updated '+j.updated;drawChips();render();})
- .catch(()=>{document.getElementById('upd').textContent='sun.json not found yet';});
+document.querySelectorAll('.mbtn').forEach(b=>b.onclick=e=>{e.stopPropagation();const p=$(b.dataset.for);
+  const o=p.classList.contains('open');closeAll();if(!o)p.classList.add('open');});
+document.addEventListener('click',e=>{if(!e.target.closest('.mpick'))closeAll();});
+$('cust').oninput=e=>{const v=parseFloat(e.target.value);
+  if(isFinite(v)&&v>=0){S.tol=v;S.custom=true;}else{S.tol=5;S.custom=false;} draw();render();};
+document.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
+  if(S.sort===k)S.dir*=-1;else{S.sort=k;S.dir=k==='lg'?-1:1;}render();});
+$('q').oninput=e=>{S.q=e.target.value;render();};
+fetch('sun.json?t='+Date.now()).then(r=>r.json()).then(j=>{
+  if(!j.rows.length||!j.rows[0].bp){$('upd').textContent='Purana sun.json — workflow ek baar chalaiye';return;}
+  D=j;$('upd').textContent='Updated '+j.updated;draw();render();})
+ .catch(()=>{$('upd').textContent='sun.json not found yet';});
 </script>
 </body>
 </html>
