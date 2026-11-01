@@ -2,13 +2,12 @@
 SUN scanner — stocks trading near their N-period MONTHLY high (breakout watch).
 
 For every stock in the swing/positional universe (all NSE EQ + BE + BZ, same as scanner.py):
-    * download monthly candles (yfinance 1mo, up to ~8 years)
-    * for each lookback window (6M, 1Y, 2Y, 3Y, 4Y, 5Y, 6Y, 7Y) take the highest HIGH
-      of the last N COMPLETED monthly candles (current running month is excluded,
-      so the high is the level the stock has to break)
+    * download monthly candles (yfinance 1mo, full history)
+    * store running-max breakpoints of the COMPLETED monthly highs (current month excluded),
+      so the dashboard can get the N-month high for any N (1-12 months, 1-20 years)
     * LTP = latest close
     * dist% = (LTP - high) / high * 100   (negative = below the high, positive = already above)
-The dashboard (sun.html) filters by window and by +/- tolerance (1 / 2 / 5 %).
+The dashboard (sun.html) filters by lookback, +/- tolerance (preset or custom) and series.
 A stock without enough history for a window gets null for that window (never a fake high).
 
 Output: sun.json  (read by sun.html). Run once a day near market close (Mon-Fri).
@@ -28,7 +27,6 @@ IST = timezone(timedelta(hours=5, minutes=30))
 OUT_FILE = "sun.json"
 CHUNK = 100
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-WINDOWS = {"6M": 6, "1Y": 12, "2Y": 24, "3Y": 36, "4Y": 48, "5Y": 60, "6Y": 72, "7Y": 84}
 MIN_COVER = 0.9          # window counts if >= 90% of its months exist (allows a missing yf month)
 
 
@@ -92,23 +90,24 @@ def process(base, df):
     idx = df.index.tz_localize(None) if df.index.tz is not None else df.index
     df = df.copy()
     df["m"] = idx.to_period("M")
-    # yfinance sometimes returns two rows for the running month -> merge per month
     g = df.groupby("m").agg(High=("High", "max"), Close=("Close", "last")).sort_index()
     ltp = g["Close"].iloc[-1]
     done = g[g.index < cur_month]                      # completed months only
-    w = {}
-    for k, n in WINDOWS.items():
-        start = cur_month - n
-        part = done[done.index >= start]
-        if len(part) >= int(n * MIN_COVER) and done.index.min() <= start + 1:
-            hi = part["High"].max()
-            hm = part["High"].idxmax()
-            w[k] = [r2(hi), r2((ltp - hi) / hi * 100), str(hm)]   # [high, dist%, month of high]
-        else:
-            w[k] = None
+    if done.empty:
+        return None
+    # Running-max breakpoints walking back from last completed month:
+    # [k, high, "YYYY-MM"] = high of the last k months jumps to `high` at k.
+    # High of ANY lookback N = high of the last breakpoint with k <= N (dashboard does this).
+    bp, run = [], 0.0
+    for m, hi in zip(reversed(done.index), reversed(done["High"].tolist())):
+        k = (cur_month - m).n
+        if hi > run:
+            run = hi
+            bp.append([k, r2(hi), str(m)])
+    span = (cur_month - done.index.min()).n            # months of history available
     return {"s": base, "ltp": r2(ltp), "fno": 1 if base in fno_set else 0,
             "ser": series_map.get(base, "EQ"), "sec": sector.get(base, ""),
-            "hist": len(done), "w": w}
+            "span": span, "cnt": len(done), "bp": bp}
 
 
 rows, failed = [], 0
@@ -116,7 +115,7 @@ syms = [s + ".NS" for s in base_symbols]
 for i in range(0, len(syms), CHUNK):
     chunk = syms[i:i + CHUNK]
     try:
-        data = yf.download(chunk, period="8y", interval="1mo", group_by="ticker",
+        data = yf.download(chunk, period="max", interval="1mo", group_by="ticker",
                            threads=True, progress=False, auto_adjust=False)
     except Exception:
         failed += len(chunk)
@@ -138,7 +137,7 @@ for i in range(0, len(syms), CHUNK):
 out = {"updated": now.strftime("%Y-%m-%d %H:%M IST"),
        "updatedUtc": datetime.now(timezone.utc).isoformat(),
        "universe": f"NSE EQ/BE/BZ ({len(rows)} ok)",
-       "windows": list(WINDOWS.keys()), "rows": rows}
+       "maxMonths": 240, "minCover": MIN_COVER, "rows": rows}
 with open(OUT_FILE, "w") as f:
     json.dump(out, f, separators=(",", ":"))
 print(f"Wrote {OUT_FILE}: {len(rows)} rows, {failed} failed")
