@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Tapewatch — Sun</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0B0F15;--panel:#111826;--panel2:#161F2D;--line:#1E2B3C;--text:#EAF1F7;--muted:#7E8CA0;
+--acc:#F2B33D;--acc-dim:rgba(242,179,61,.14);--up:#3FBF8F;--up-dim:rgba(63,191,143,.13);--dn:#E4586C;--dn-dim:rgba(228,88,108,.13);
+--mono:'JetBrains Mono',ui-monospace,Menlo,monospace;--disp:'Sora',system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--disp);padding-bottom:60px}
+a{color:inherit;text-decoration:none}
+header{position:sticky;top:0;z-index:20;background:rgba(11,15,21,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 16px}
+.hrow{display:flex;align-items:baseline;gap:12px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+.wordmark{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:19px;color:var(--acc)}
+.back{font-size:12px;color:var(--muted)}
+.upd{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono);text-align:right}
+main{max-width:1100px;margin:0 auto;padding:14px 16px}
+.grp{margin-bottom:10px}
+.lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:5px 12px;border-radius:999px;font-size:12px;cursor:pointer;font-family:var(--mono)}
+.chip.on{background:var(--acc-dim);border-color:var(--acc);color:var(--acc)}
+.search{width:100%;max-width:260px;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:7px 11px;border-radius:8px;font-size:13px}
+.stat{font-size:12px;color:var(--muted);margin:12px 0 8px;font-family:var(--mono)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;text-align:right;padding:8px 10px;cursor:pointer;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{padding:7px 10px;border-top:1px solid var(--line);text-align:right;font-family:var(--mono);white-space:nowrap}
+tr:hover td{background:var(--panel)}
+.sym a{font-family:var(--disp);font-weight:700}
+.tag{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:5px;background:var(--panel2);color:var(--muted);font-family:var(--mono)}
+.pos{color:var(--up)} .neg{color:var(--dn)}
+.also{color:var(--muted);font-size:11px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><div class="hrow">
+  <a class="back" href="./">← Swing / Positional</a>
+  <span class="wordmark">Sun ☀</span>
+  <span class="back">LTP near N-period monthly high</span>
+  <span class="upd" id="upd">loading…</span>
+</div></header>
+<main>
+  <div class="grp"><div class="lab">Lookback (completed monthly candles)</div><div class="chips" id="win"></div></div>
+  <div class="grp"><div class="lab">Distance from high</div><div class="chips" id="tol"></div></div>
+  <div class="grp"><div class="lab">Side</div><div class="chips" id="side"></div></div>
+  <div class="grp"><div class="lab">Filters</div><div class="chips" id="flt"></div></div>
+  <input class="search" id="q" placeholder="Search symbol / sector">
+  <div class="stat" id="stat"></div>
+  <div class="tw"><table><thead><tr>
+    <th data-k="s">Stock</th><th data-k="ltp">LTP</th><th data-k="hi">High</th><th data-k="hm">High month</th><th data-k="d">Dist %</th><th data-k="also">Also near</th>
+  </tr></thead><tbody id="tb"></tbody></table></div>
+</main>
+<script>
+const S={win:'6M',tol:5,side:'both',fno:false,eqOnly:false,q:'',sort:'ad',dir:1};
+let D=null;
+const TOLS=[1,2,5], SIDES=[['both','± around'],['below','Below high (pre-breakout)'],['above','Above high (just broke)']];
+function chips(id,items,key,cb){const el=document.getElementById(id);el.innerHTML='';
+  items.forEach(([v,l])=>{const b=document.createElement('button');b.className='chip'+(S[key]===v?' on':'');b.textContent=l;
+    b.onclick=()=>{S[key]=(typeof S[key]==='boolean')?!S[key]:v;cb&&cb();render();};el.appendChild(b);});}
+function drawChips(){
+  chips('win',D.windows.map(w=>[w,w]),'win',drawChips);
+  chips('tol',TOLS.map(t=>[t,'± '+t+'%']),'tol',drawChips);
+  chips('side',SIDES,'side',drawChips);
+  const f=document.getElementById('flt');f.innerHTML='';
+  [['fno','F&O only'],['eqOnly','EQ series only']].forEach(([k,l])=>{const b=document.createElement('button');
+    b.className='chip'+(S[k]?' on':'');b.textContent=l;b.onclick=()=>{S[k]=!S[k];drawChips();render();};f.appendChild(b);});
+}
+const ok=(d)=>d!=null&&Math.abs(d)<=S.tol&&(S.side==='both'||(S.side==='below'?d<=0:d>=0));
+function render(){
+  const q=S.q.trim().toUpperCase(); let rows=[];
+  for(const r of D.rows){const w=r.w[S.win]; if(!w)continue; const d=w[1]; if(!ok(d))continue;
+    if(S.fno&&!r.fno)continue; if(S.eqOnly&&r.ser!=='EQ')continue;
+    if(q&&!r.s.includes(q)&&!(r.sec||'').toUpperCase().includes(q))continue;
+    const also=D.windows.filter(k=>k!==S.win&&r.w[k]&&ok(r.w[k][1]));
+    rows.push({r,s:r.s,ltp:r.ltp,hi:w[0],hm:w[2],d,ad:Math.abs(d),also});}
+  const k=S.sort; rows.sort((a,b)=>{let x=k==='also'?a.also.length:a[k],y=k==='also'?b.also.length:b[k];
+    return (x>y?1:x<y?-1:0)*S.dir;});
+  const fmt=v=>v==null?'–':v.toLocaleString('en-IN',{maximumFractionDigits:2});
+  document.getElementById('stat').textContent=`${rows.length} stocks · ${S.win} high · ±${S.tol}% · ${D.rows.length} scanned`;
+  document.getElementById('tb').innerHTML=rows.length?rows.map(x=>`<tr>
+    <td class="sym"><a href="https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(x.s)}" target="_blank" rel="noopener">${x.s}</a>${x.r.fno?'<span class="tag">F&O</span>':''}${x.r.ser!=='EQ'?`<span class="tag">${x.r.ser}</span>`:''}${x.r.sec?`<div class="also">${x.r.sec}</div>`:''}</td>
+    <td>${fmt(x.ltp)}</td><td>${fmt(x.hi)}</td><td>${x.hm}</td>
+    <td class="${x.d>=0?'pos':'neg'}">${x.d>0?'+':''}${x.d.toFixed(2)}</td>
+    <td class="also">${x.also.join(' ')||'–'}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Is filter par koi stock nahi</td></tr>';
+}
+document.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k==='d'?'ad':th.dataset.k;
+  if(S.sort===k)S.dir*=-1;else{S.sort=k;S.dir=1;}render();});
+document.getElementById('q').oninput=e=>{S.q=e.target.value;render();};
+fetch('sun.json?t='+Date.now()).then(r=>r.json()).then(j=>{D=j;
+  document.getElementById('upd').textContent='Updated '+j.updated;drawChips();render();})
+ .catch(()=>{document.getElementById('upd').textContent='sun.json not found yet';});
+</script>
+</body>
+</html>
