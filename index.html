@@ -146,6 +146,15 @@ main{max-width:1100px;margin:0 auto;padding:14px 16px}
 .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .count{font-family:var(--mono)}
 .toolbar select{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px}
+.sortbox{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.srow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.srow .lv{font-size:11px;color:var(--muted);min-width:42px}
+.srow select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;color-scheme:var(--cs)}
+.srow .dir,.srow .del,.sadd{padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:11.5px;cursor:pointer}
+.srow .dir{min-width:92px}
+.srow .del{color:var(--muted)}
+.sadd{align-self:flex-start;color:var(--acc);border-color:var(--acc)}
+html[data-theme^="retro"] .srow select,html[data-theme^="retro"] .srow .dir,html[data-theme^="retro"] .srow .del,html[data-theme^="retro"] .sadd{border:2px outset var(--face)}
 .copy{padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-size:11.5px;cursor:pointer}
 .copy:active{color:var(--acc);border-color:var(--acc)}
 .rows{display:flex;flex-direction:column;gap:8px}
@@ -237,11 +246,8 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
   </div>
 
   <div class="fpanel" id="fpanel">
-    <div class="fsec">Crossovers on SELECTED timeframe — tap chip to cycle: off → ± either side → ↑ first above second → ↓ first below second · gap ≤ % box</div>
+    <div class="fsec">Crossover on SELECTED timeframe — tap chip to cycle: off → ± either side → ↑ first above second → ↓ first below second · gap ≤ % box</div>
     <div class="prox">
-      <span class="xchip" data-px="p921">9 × 21 EMA</span>
-      <span class="xchip" data-px="p950">9 × 50 EMA</span>
-      <span class="xchip" data-px="p9200">9 × 200 EMA</span>
       <span class="xchip" data-px="pvwap">LTP × VWAP</span>
       <span class="thwrap">gap ≤ <input id="pTh" type="number" value="0.3" step="0.1" min="0"> % (positive number — direction is set by the chip)</span>
     </div>
@@ -253,7 +259,6 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <div class="fgroup"><label>Prev day candle</label>
         <select id="fCandle"><option value="">Any</option><option>Bullish</option><option>Bearish</option><option>Doji</option><option>Hammer</option><option>Shooting Star</option><option>Bullish Marubozu</option><option>Bearish Marubozu</option></select>
       </div>
-      <div class="fgroup"><label>Min 7-day avg volume</label><input id="fVol" type="number" placeholder="e.g. 500000"></div>
       <div class="fgroup"><label>Signal distance % (from the level)</label><div class="frange"><input id="boMin" type="number" placeholder="min" step="0.5"><input id="boMax" type="number" placeholder="max" step="0.5"></div></div>
       <div class="fgroup"><label>LTP ₹</label><div class="frange"><input id="ltpMin" type="number" placeholder="min" step="1"><input id="ltpMax" type="number" placeholder="max" step="1"></div></div>
       <div class="fgroup"><label>Circuit streak</label>
@@ -279,51 +284,19 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
       <span class="cchip on" data-c="">Any</span>
       <span class="cchip" data-c="U-LOCK">UC locked</span>
       <span class="cchip" data-c="U-TOUCH">UC hit &amp; opened</span>
-      <span class="cchip" data-c="U-NEAR">Near UC &le;1%</span>
-      <span class="cchip lc" data-c="L-LOCK">LC locked</span>
-      <span class="cchip lc" data-c="L-TOUCH">LC hit &amp; opened</span>
-      <span class="cchip lc" data-c="L-NEAR">Near LC &le;1%</span>
-      <span class="cchip" data-c="NONE">Exclude circuit stocks</span>
-    </div>
-    <div class="fsec">Price band &amp; series</div>
-    <div class="widths" id="bands">
-      <span class="bchip on" data-b="">Any band</span>
-      <span class="bchip" data-b="2">2%</span>
-      <span class="bchip" data-b="5">5%</span>
-      <span class="bchip" data-b="10">10%</span>
-      <span class="bchip" data-b="20">20%</span>
-      <span class="bchip" data-b="NB">No band (F&amp;O)</span>
-    </div>
-    <div class="widths" id="series" style="margin-top:8px">
-      <span class="srchip on" data-sr="">All series</span>
-      <span class="srchip" data-sr="EQ">EQ only</span>
-      <span class="srchip" data-sr="T2T">Trade-to-trade only (BE / BZ)</span>
     </div>
     <div class="chks" style="margin-top:10px">
       <label><input type="checkbox" id="fNoSurv"> Hide ASM / GSM flagged</label>
       <label><input type="checkbox" id="fNoCp"> Skip circuit-prone (&ge;3 circuit closes in 20 days)</label>
     </div>
 
-    <div class="fsec" id="psec">Pattern intel — stage &amp; quality (S3 only)</div>
+    <div class="fsec" id="psec">Pattern intel — stage (S3 only)</div>
     <div class="widths" id="pstage">
       <span class="gchip on" data-st="">Any stage</span>
       <span class="gchip" data-st="E">Early detection</span>
       <span class="gchip" data-st="D">Done / confirmed</span>
-      <span class="thwrap">min quality <input id="patScore" type="number" value="60" min="0" max="100" step="5"> /100</span>
     </div>
 
-    <div class="fsec" id="rsec">Retrace level — V / U: % of the fall recovered · Flag: % of the pole pulled back · triangles have no retrace, so they drop out once this is set</div>
-    <div class="widths" id="rtWrap">
-      <span class="rchip on" data-rt=",">Any</span>
-      <span class="rchip" data-rt=",23.6">&le; 23.6</span>
-      <span class="rchip" data-rt="23.6,38.2">23.6–38.2</span>
-      <span class="rchip" data-rt="38.2,50">38.2–50</span>
-      <span class="rchip" data-rt="50,61.8">50–61.8</span>
-      <span class="rchip" data-rt="61.8,78.6">61.8–78.6</span>
-      <span class="rchip" data-rt="78.6,100">78.6–100</span>
-      <span class="rchip" data-rt="100,">&ge; 100</span>
-      <span class="thwrap">min <input id="rtMin" type="number" placeholder="any" step="0.1" min="0"> max <input id="rtMax" type="number" placeholder="any" step="0.1" min="0"> %</span>
-    </div>
     <div class="fsec" id="wsec">Rectangle range width</div>
     <div class="widths" id="widths">
       <span class="wchip on" data-w="">Any width</span>
@@ -339,19 +312,9 @@ footer{max-width:1100px;margin:20px auto;padding:0 16px;font-size:10.5px;color:v
     <span class="count" id="count">—</span>
     <button class="copy" id="copyBtn">Copy symbols</button>
     <button class="copy" id="selAll">Select all</button>
-    <select id="sort">
-      <option value="pct">Sort: distance %</option>
-      <option value="time">Sort: breakout time</option>
-      <option value="sym">Sort: symbol</option>
-      <option value="rsiD">Sort: RSI daily</option>
-      <option value="score">Sort: pattern quality</option>
-      <option value="rt">Sort: retrace %</option>
-      <option value="chg">Sort: % change today</option>
-      <option value="listed">Sort: newest listing</option>
-      <option value="width">Sort: range width</option>
-      <option value="vol">Sort: volume</option>
-    </select>
   </div>
+
+  <div class="sortbox" id="sortbox"></div>
 
   <div class="rows" id="rows"><div class="loading">Loading data.json…</div></div>
 </main>
@@ -426,14 +389,11 @@ const IPO_SIGNALS  = ['LISTED ≤1M','LISTED ≤3M','LISTED ≤6M','LISTED ≤1Y
 const BT_KEY = { 'HIGH BO':'dh', 'CLOSE BO':'dc', 'LOW BD':'dl', 'UPPER BO':'u', 'LOWER BD':'l' };
 const emaOf = (r, k) => r.ema?.[curTF().k]?.[k] ?? null;   // EMA of the SELECTED timeframe
 const PROX = {
-  p921:  { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e21')  },
-  p950:  { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e50')  },
-  p9200: { a:r=>emaOf(r,'e9'),  b:r=>emaOf(r,'e200') },
   pvwap: { a:r=>r.ltp, b:r=>r.vwap },
 };
 
 let DATA = [], strat = 'S1', tfIdx = 0, sigFilter = '', widthFilter = '', proxSt = {};
-let ipoSel = '', patStage = '', circSel = '', bandSel = '', srSel = '';
+let ipoSel = '', patStage = '', circSel = '';
 let VIEW = [];                 // rows currently drawn as cards (same order as the DOM)
 const selected = new Map();    // key -> export-row snapshot taken at the moment a card was ticked
 
@@ -506,8 +466,6 @@ const isT2T = r => r.sr === 'BE' || r.sr === 'BZ';
 /* universe gate shared by the card list AND the pulse counts */
 function uniOk(r) {
   if (!ipoOk(r)) return false;
-  if (bandSel && (bandSel === 'NB' ? r.band != null : r.band !== +bandSel)) return false;
-  if (srSel && (srSel === 'T2T' ? !isT2T(r) : isT2T(r))) return false;
   if (circSel) {
     const c = circ(r);
     if (circSel === 'NONE') { if (c && c.st !== 'NEAR' && c.st !== 'REV') return false; }
@@ -524,21 +482,12 @@ function uniOk(r) {
 /* retrace % — V/U: how much of the fall has been recovered (rc) · Flag: how much of the pole was given back (rt) */
 const retraceOf = p => (p.p === 'V' || p.p === 'U') ? p.rc : p.p === 'FLAG' ? p.rt : null;
 
-/* every pattern on the selected timeframe that passes quality / stage / retrace */
+/* every pattern on the selected timeframe that passes the stage filter */
 function patPool(r) {
   const arr = (r.pat && r.pat[curTF().k]) || [];
   if (!arr.length) return [];
-  const minSc = +$('patScore').value || 0;
-  const rMin = $('rtMin').value, rMax = $('rtMax').value, rtOn = rMin !== '' || rMax !== '';
   return arr.filter(p => {
-    if (p.sc < minSc) return false;
     if (patStage && p.st !== patStage) return false;
-    if (rtOn) {
-      const rc = retraceOf(p);
-      if (rc == null) return false;                     // triangles: no retrace value
-      if (rMin !== '' && rc < +rMin) return false;
-      if (rMax !== '' && rc > +rMax) return false;
-    }
     return true;
   });
 }
@@ -628,6 +577,57 @@ function streakOk(r) {
   return v[0] === 'U' ? cs >= n : -cs >= n;
 }
 
+/* ================= MULTI-LEVEL SORT ================= */
+const SORTS = {
+  pct:    { lab:'distance %',        d:'desc', v:(r,ev)=> ev.pct == null ? null : Math.abs(ev.pct) },
+  time:   { lab:'breakout time',     d:'asc',  v:(r,ev)=> ev.t ?? null },
+  rsiD:   { lab:'RSI daily',         d:'desc', v:(r,ev)=> r.rsiD ?? null },
+  chg:    { lab:'% change today',    d:'desc', v:(r,ev)=> r.chg ?? null },
+  listed: { lab:'newest listing',    d:'desc', v:(r,ev)=> r.ld || null },
+  width:  { lab:'range width',       d:'asc',  v:(r,ev)=> ev.w ?? null },
+  vol:    { lab:'volume',            d:'desc', v:(r,ev)=> r.v7 ?? null },
+};
+const MAX_SORT = 4;
+let sortRows = [{ key:'pct', dir:'desc' }];
+function multiCmp(a, b) {
+  for (const sr of sortRows) {
+    const f = SORTS[sr.key].v, x = f(a.r, a.ev), y = f(b.r, b.ev);
+    if (x == null && y == null) continue;
+    if (x == null) return 1;                      // blanks always go last, in either direction
+    if (y == null) return -1;
+    if (x === y) continue;
+    const c = x < y ? -1 : 1;
+    return sr.dir === 'asc' ? c : -c;
+  }
+  return 0;
+}
+function drawSort() {
+  const box = $('sortbox');
+  box.innerHTML = sortRows.map((sr, i) => `
+    <div class="srow" data-i="${i}">
+      <span class="lv">${i === 0 ? 'Sort by' : 'then by'}</span>
+      <select class="skey">${Object.entries(SORTS).map(([k, m]) =>
+        `<option value="${k}" ${k === sr.key ? 'selected' : ''}>${m.lab}</option>`).join('')}</select>
+      <button class="dir" type="button">${sr.dir === 'asc' ? '↑ Ascending' : '↓ Descending'}</button>
+      ${i > 0 ? '<button class="del" type="button" title="Remove this level">✕</button>' : ''}
+    </div>`).join('') +
+    (sortRows.length < MAX_SORT ? '<button class="sadd" type="button">+ Add another sort</button>' : '');
+  box.querySelectorAll('.srow').forEach(row => {
+    const i = +row.dataset.i;
+    row.querySelector('.skey').onchange = e => { sortRows[i].key = e.target.value; sortRows[i].dir = SORTS[e.target.value].d; drawSort(); render(); };
+    row.querySelector('.dir').onclick = () => { sortRows[i].dir = sortRows[i].dir === 'asc' ? 'desc' : 'asc'; drawSort(); render(); };
+    const del = row.querySelector('.del');
+    if (del) del.onclick = () => { sortRows.splice(i, 1); drawSort(); render(); };
+  });
+  const add = box.querySelector('.sadd');
+  if (add) add.onclick = () => {
+    const used = new Set(sortRows.map(x => x.key));
+    const k = Object.keys(SORTS).find(x => !used.has(x)) || 'pct';
+    sortRows.push({ key:k, dir:SORTS[k].d }); drawSort(); render();
+  };
+}
+const sortSummary = () => sortRows.map(x => `${SORTS[x.key].lab} ${x.dir === 'asc' ? '↑' : '↓'}`).join(' → ');
+
 function currentList() {
   const q = $('search').value.trim().toUpperCase();
   const th = Math.abs(+$('pTh').value) || 0.3;  // direction comes from the chip; number is always a positive gap
@@ -656,23 +656,9 @@ function currentList() {
     const fc = $('fCandle').value;
     if (fc && !(r.pd && r.pd.pat === fc)) continue;
     if ($('fFno').checked && !r.fno) continue;
-    const mv = $('fVol').value;
-    if (mv && !(r.v7 >= +mv)) continue;
     out.push({ r, ev });
   }
-  const key = $('sort').value;
-  out.sort((a, b) => {
-    if (key === 'sym')   return a.r.s < b.r.s ? -1 : 1;
-    if (key === 'time')  return (a.ev.t ?? '99:99') < (b.ev.t ?? '99:99') ? -1 : 1;
-    if (key === 'rsiD')  return (b.r.rsiD ?? -1) - (a.r.rsiD ?? -1);
-    if (key === 'score') return (b.ev.sc ?? -1) - (a.ev.sc ?? -1);
-    if (key === 'rt')    return (b.ev.rt ?? -1) - (a.ev.rt ?? -1);
-    if (key === 'chg')   return (b.r.chg ?? -999) - (a.r.chg ?? -999);
-    if (key === 'listed') return (b.r.ld || '').localeCompare(a.r.ld || '');
-    if (key === 'width') return (a.ev.w ?? 1e9) - (b.ev.w ?? 1e9);
-    if (key === 'vol')   return (b.r.v7 ?? 0) - (a.r.v7 ?? 0);
-    return Math.abs(b.ev.pct ?? 0) - Math.abs(a.ev.pct ?? 0);
-  });
+  out.sort(multiCmp);
   return out;
 }
 
@@ -691,11 +677,11 @@ try { applyTheme(localStorage.getItem('tw-theme') || 'night'); } catch (e) { app
 /* when nothing matches, say WHICH filter is emptying the list */
 function emptyHint() {
   const base = 'No stocks match. Loosen a filter or pick another signal chip.';
-  if (!(circSel || bandSel || srSel)) return `<div class="empty">${base}</div>`;
+  if (!circSel) return `<div class="empty">${base}</div>`;
   if (!DATA.some(r => r.band != null || r.sr))
     return `<div class="empty">${base}<br><br>data.json has no price-band data yet — the updated scanner has not run. Trigger the workflow once, then hard-refresh.</div>`;
   const k = STRATS[strat].kind, n = DATA.filter(uniOk).length, why = [];
-  if ($('fFno').checked && ((circSel && circSel !== 'NONE') || (bandSel && bandSel !== 'NB')))
+  if ($('fFno').checked && circSel)
     why.push('"F&O only" is ticked — F&O stocks have no fixed band, so they are never in circuit');
   if (sigFilter) why.push(`the signal chip "${sigFilter}" is selected`);
   if (k === 'doji') why.push('S1 only lists stocks whose previous candle was a Doji');
@@ -705,8 +691,8 @@ function emptyHint() {
   if ($('boMin').value !== '' || $('boMax').value !== '') why.push('the "Signal distance %" range is set');
   if ($('fStreak').value) why.push('a circuit-streak filter is set');
   if ($('ltpMin').value !== '' || $('ltpMax').value !== '') why.push('the LTP range is set');
-  let msg = `${n} stock${n === 1 ? '' : 's'} match the circuit / band / series filters by themselves`;
-  msg += why.length ? `, but here they are removed because ${why.join('; ')}.` : ', but another filter (RSI, volume, crossover, candle, search) removes them.';
+  let msg = `${n} stock${n === 1 ? '' : 's'} match the circuit filter by themselves`;
+  msg += why.length ? `, but here they are removed because ${why.join('; ')}.` : ', but another filter (RSI, crossover, candle, search) removes them.';
   if (k !== 'rect') msg += ' For a pure circuit scan use S2 · Rect Breakout — it lists every stock.';
   return `<div class="empty">${base}<br><br>${msg}</div>`;
 }
@@ -844,8 +830,7 @@ function drawPath() {
   document.querySelectorAll('.schip').forEach(c => c.onclick = () => {
     strat = c.dataset.id; tfIdx = 0; sigFilter = '';
     const nk = STRATS[strat].kind;
-    if (nk === 'pat' && $('sort').value === 'pct') $('sort').value = 'score';
-    if (nk === 'ipo' && ['pct','score'].includes($('sort').value)) $('sort').value = 'listed';
+    if (nk === 'ipo' && sortRows[0].key === 'pct') { sortRows[0] = { key:'listed', dir:SORTS.listed.d }; drawSort(); }
     drawPath(); render();
   });
   document.querySelectorAll('.tchip').forEach(c => c.onclick = () => {
@@ -856,8 +841,6 @@ function drawPath() {
   $('wsec').style.display   = k === 'rect' ? 'block' : 'none';
   $('pstage').style.display = k === 'pat'  ? 'flex' : 'none';
   $('psec').style.display   = k === 'pat'  ? 'block' : 'none';
-  $('rtWrap').style.display = k === 'pat'  ? 'flex'  : 'none';
-  $('rsec').style.display   = k === 'pat'  ? 'block' : 'none';
 }
 
 document.querySelectorAll('.wchip').forEach(w => w.onclick = () => {
@@ -868,7 +851,7 @@ document.querySelectorAll('.ichip').forEach(w => w.onclick = () => {
   document.querySelectorAll('.ichip').forEach(x => x.classList.remove('on'));
   w.classList.add('on'); ipoSel = w.dataset.ipo; render();
 });
-[['cchip', 'c', v => circSel = v], ['bchip', 'b', v => bandSel = v], ['srchip', 'sr', v => srSel = v]]
+[['cchip', 'c', v => circSel = v]]
   .forEach(([cls, key, set]) => document.querySelectorAll('.' + cls).forEach(w => w.onclick = () => {
     document.querySelectorAll('.' + cls).forEach(x => x.classList.remove('on'));
     w.classList.add('on'); set(w.dataset[key]); render();
@@ -896,24 +879,20 @@ document.querySelectorAll('.xchip').forEach(x => {
   };
 });
 $('ftoggle').onclick = () => { $('fpanel').classList.toggle('open'); $('ftoggle').classList.toggle('active'); };
-const TXT = ['search','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','fVol','boMin','boMax','ltpMin','ltpMax','patScore'];
+const TXT = ['search','pTh','rsiDmin','rsiDmax','rsiWmin','rsiWmax','rsiMmin','rsiMmax','boMin','boMax','ltpMin','ltpMax'];
 TXT.forEach(id => $(id).oninput = render);
-['fCandle','sort','fStreak'].forEach(id => $(id).onchange = render);
+['fCandle','fStreak'].forEach(id => $(id).onchange = render);
 ['fFno','fNoSurv','fNoCp'].forEach(id => $(id).onchange = render);
 $('freset').onclick = () => {
   TXT.forEach(id => $(id).value = ''); $('pTh').value = '0.3'; $('fStreak').value = '';
-  $('patScore').value = '60';
-  $('rtMin').value = ''; $('rtMax').value = ''; syncRt();
   $('fCandle').value = '';
   ['fFno','fNoSurv','fNoCp'].forEach(id => $(id).checked = false);
-  sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = ''; circSel = ''; bandSel = ''; srSel = '';
+  sigFilter = ''; widthFilter = ''; proxSt = {}; ipoSel = ''; patStage = ''; circSel = '';
   drawProx();
   document.querySelectorAll('.wchip').forEach(w => w.classList.toggle('on', w.dataset.w === ''));
   document.querySelectorAll('.ichip').forEach(w => w.classList.toggle('on', w.dataset.ipo === ''));
   document.querySelectorAll('.gchip').forEach(w => w.classList.toggle('on', w.dataset.st === ''));
   document.querySelectorAll('.cchip').forEach(w => w.classList.toggle('on', w.dataset.c === ''));
-  document.querySelectorAll('.bchip').forEach(w => w.classList.toggle('on', w.dataset.b === ''));
-  document.querySelectorAll('.srchip').forEach(w => w.classList.toggle('on', w.dataset.sr === ''));
   render();
 };
 $('copyBtn').onclick = () => {
@@ -924,16 +903,7 @@ $('copyBtn').onclick = () => {
   });
 };
 
-/* ================= RETRACE FILTER WIRING ================= */
-function syncRt() {   // highlight the preset chip that matches the min / max boxes (none if custom)
-  const cur = $('rtMin').value.trim() + ',' + $('rtMax').value.trim();
-  document.querySelectorAll('.rchip').forEach(c => c.classList.toggle('on', c.dataset.rt === cur));
-}
-document.querySelectorAll('.rchip').forEach(c => c.onclick = () => {
-  const [a, b] = c.dataset.rt.split(',');
-  $('rtMin').value = a; $('rtMax').value = b; syncRt(); render();
-});
-['rtMin', 'rtMax'].forEach(id => $(id).oninput = () => { syncRt(); render(); });
+drawSort();
 
 /* ================= SELECT CARDS + DAILY EXCEL ================= */
 const TV_URL = 'https://www.tradingview.com/chart/?symbol=NSE:';
@@ -982,8 +952,6 @@ function filterSummary() {
   if (sigFilter) parts.push('Signal: ' + sigFilter);
   if (kind === 'pat') {
     if (patStage) parts.push('Stage: ' + (patStage === 'E' ? 'Early' : 'Done'));
-    parts.push('Quality ≥ ' + (+v('patScore') || 0));
-    rng('Retrace', v('rtMin'), v('rtMax'), '%');
   }
   if (kind === 'rect' && widthFilter) parts.push('Width: ' + BUCKET_LABEL[widthFilter]);
   rng('Signal distance', v('boMin'), v('boMax'), '%');
@@ -999,17 +967,15 @@ function filterSummary() {
   rng('RSI W', v('rsiWmin'), v('rsiWmax'));
   rng('RSI M', v('rsiMmin'), v('rsiMmax'));
   if (v('fCandle')) parts.push('Prev candle: ' + v('fCandle'));
-  if (v('fVol')) parts.push('Vol ≥ ' + v('fVol'));
   if ($('fFno').checked) parts.push('F&O only');
   const ipo = document.querySelector('.ichip.on');
   if (ipoSel && ipo) parts.push(ipo.textContent.trim());
   const chipTxt = (cls, on) => on ? document.querySelector('.' + cls + '.on')?.textContent.trim() : '';
   if (circSel)  parts.push('Circuit: ' + chipTxt('cchip', circSel));
-  if (bandSel)  parts.push('Band: ' + chipTxt('bchip', bandSel));
-  if (srSel)    parts.push('Series: ' + chipTxt('srchip', srSel));
   if ($('fNoSurv').checked) parts.push('ASM/GSM hidden');
   if ($('fNoCp').checked)   parts.push('Circuit-prone skipped');
   if (v('search')) parts.push('Search: ' + v('search'));
+  parts.push('Sort: ' + sortSummary());
   return parts.join(' | ') || 'None';
 }
 
